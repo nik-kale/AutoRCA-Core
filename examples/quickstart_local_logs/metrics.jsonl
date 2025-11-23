@@ -1,0 +1,16 @@
+{"timestamp": "2025-11-10T09:59:00Z", "service": "postgres", "metric_name": "connections_active", "value": 120, "unit": "count"}
+{"timestamp": "2025-11-10T09:59:30Z", "service": "postgres", "metric_name": "connections_active", "value": 135, "unit": "count"}
+{"timestamp": "2025-11-10T10:00:00Z", "service": "postgres", "metric_name": "connections_active", "value": 180, "unit": "count"}
+{"timestamp": "2025-11-10T10:00:10Z", "service": "postgres", "metric_name": "connections_active", "value": 195, "unit": "count"}
+{"timestamp": "2025-11-10T10:00:15Z", "service": "postgres", "metric_name": "connections_active", "value": 200, "unit": "count"}
+{"timestamp": "2025-11-10T10:00:20Z", "service": "postgres", "metric_name": "connections_active", "value": 200, "unit": "count"}
+{"timestamp": "2025-11-10T10:00:00Z", "service": "user-service", "metric_name": "request_latency_p95", "value": 250, "unit": "ms"}
+{"timestamp": "2025-11-10T10:00:10Z", "service": "user-service", "metric_name": "request_latency_p95", "value": 1500, "unit": "ms"}
+{"timestamp": "2025-11-10T10:00:20Z", "service": "user-service", "metric_name": "request_latency_p95", "value": 2800, "unit": "ms"}
+{"timestamp": "2025-11-10T10:00:00Z", "service": "api-gateway", "metric_name": "request_latency_p95", "value": 180, "unit": "ms"}
+{"timestamp": "2025-11-10T10:00:10Z", "service": "api-gateway", "metric_name": "request_latency_p95", "value": 1800, "unit": "ms"}
+{"timestamp": "2025-11-10T10:00:20Z", "service": "api-gateway", "metric_name": "request_latency_p95", "value": 3200, "unit": "ms"}
+{"timestamp": "2025-11-10T10:00:00Z", "service": "postgres", "metric_name": "cpu_percent", "value": 45, "unit": "percent"}
+{"timestamp": "2025-11-10T10:00:10Z", "service": "postgres", "metric_name": "cpu_percent", "value": 78, "unit": "percent"}
+{"timestamp": "2025-11-10T10:00:20Z", "service": "postgres", "metric_name": "cpu_percent", "value": 92, "unit": "percent"}
+{"timestamp": "2025-11-10T10:00:30Z", "service": "postgres", "metric_name": "cpu_percent", "value": 95, "unit": "percent"}
