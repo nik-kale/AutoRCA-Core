@@ -1,0 +1,3 @@
+{"timestamp": "2025-11-10T10:00:00Z", "service": "api-gateway", "level": "ERROR", "message": "Upstream timeout calling user-service"}
+{"timestamp": "2025-11-10T10:00:03Z", "service": "user-service", "level": "ERROR", "message": "DB connection pool exhausted"}
+{"timestamp": "2025-11-10T10:00:05Z", "service": "postgres", "level": "WARN", "message": "Max connections reached"}
