@@ -1,0 +1,92 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autorca-core"
+version = "0.2.0"
+description = "Agentic Root Cause Analysis engine for AI-powered autonomous reliability, SRE, and support"
+readme = "README.md"
+authors = [
+    { name = "Nik Kale", email = "nik@example.com" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Monitoring",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = [
+    "rca",
+    "root-cause-analysis",
+    "sre",
+    "devops",
+    "observability",
+    "monitoring",
+    "troubleshooting",
+    "ai-ops",
+    "autonomous-ops",
+    "incident-response",
+]
+
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
+]
+
+llm = [
+    "openai>=1.0",
+    "anthropic>=0.18",
+]
+
+[project.urls]
+Homepage = "https://github.com/nik-kale/AutoRCA-Core"
+Repository = "https://github.com/nik-kale/AutoRCA-Core"
+Documentation = "https://github.com/nik-kale/AutoRCA-Core#readme"
+Issues = "https://github.com/nik-kale/AutoRCA-Core/issues"
+
+[project.scripts]
+autorca = "autorca_core.cli.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["autorca_core*"]
+
+[tool.setuptools.package-data]
+autorca_core = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"

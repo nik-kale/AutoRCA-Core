@@ -1,223 +1,331 @@
-# ADAPT-RCA
+# AutoRCA-Core (ADAPT-RCA)
 
-**ADAPT-RCA (Adaptive Diagnostic Agent for Proactive Troubleshooting – Root Cause Analyzer)** is an open-source agentic AI engine that analyzes logs, events, and telemetry to identify likely root causes and recommend remediation steps.
+> **Agentic Root Cause Analysis engine for AI-powered autonomous reliability, SRE, and support.**
 
-It is designed for **cloud**, **SaaS**, and **security** environments where teams are flooded with signals but lack time to manually correlate everything.
+AutoRCA-Core is a graph-based RCA engine that analyzes logs, metrics, traces, configs, and documentation to automatically identify root causes and recommend remediation steps. It's designed as a **reference architecture** for building autonomous operations and reliability agents.
 
----
-
-## 🔍 What ADAPT-RCA Does
-
-- Ingests **logs, alerts, and events** from your systems (JSON, text, CSV).
-- Uses an **agentic AI reasoning loop** to:
-  - Cluster related events
-  - Identify anomalies / breakpoints
-  - Propose **probable root causes**
-  - Suggest **next-step actions** (e.g., restart service, roll back deploy, update config).
-- Produces:
-  - A **human-readable incident summary**
-  - A **graph of suspected dependencies / causal links** (e.g., service → DB → config)
-  - Optional **machine-readable JSON output** for downstream automation.
-
-ADAPT-RCA is meant to be:
-- **Extensible** – plug in your own parsers, log schemas, and tools.
-- **Composable** – run as a CLI, library, or part of your existing pipeline.
-- **Transparent** – every reasoning step is logged and inspectable.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 ---
 
-## 🧠 Architecture Overview
+## What This Is
 
-At a high level, ADAPT-RCA consists of:
+AutoRCA-Core provides:
 
-1. **Ingestion Layer**
-   - Connectors for log files (local), JSON events, and simple HTTP inputs.
-   - Normalizes records into a common event model.
+- **Multi-signal ingestion**: Logs, metrics, distributed traces, and config changes
+- **Graph-based topology**: Builds service dependency graphs and causal relationships
+- **Rule-based reasoning**: Deterministic heuristics for identifying root causes
+- **LLM integration (optional)**: Enhance analysis with natural language insights
+- **Autonomous-first design**: Built to be called by AI agents, UIs, and automation workflows
 
-2. **Enrichment & Parsing**
-   - Extracts key fields (service, timestamp, severity, error codes, request IDs, etc.).
-   - Optional enrichment with deployment metadata or topology.
-
-3. **Agentic Reasoning Engine**
-   - Analyzes patterns, time windows, and relationships.
-   - Uses an LLM (local or hosted) to:
-     - Group related events into candidate incidents.
-     - Hypothesize root causes.
-     - Propose mitigation actions.
-
-4. **Causal Graph Builder**
-   - Builds a directed graph of components, errors, and dependencies.
-   - Annotates edges with evidence (log lines, metrics, time deltas).
-
-5. **Report & Output**
-   - CLI output for humans.
-   - JSON/YAML output for automation.
-   - Optional HTML/Markdown incident report.
+**Key differentiators:**
+- Graph-based causal analysis over temporal event correlation
+- Works offline with rules-only mode (no LLM required)
+- Designed for integration into larger autonomous ops stacks
 
 ---
 
-## ✨ Example Use Cases
+## Who This Is For
 
-- **SaaS outage analysis**: You upload API gateway logs + DB errors → ADAPT-RCA suggests that a misconfigured rollout to `v2` of a service caused a surge in 500s.
-- **Security incident triage**: You feed in auth logs, firewall alerts, and endpoint events → ADAPT-RCA correlates them into a single suspected credential abuse incident.
-- **Release validation**: Compare logs from "before" and "after" a deployment to see what changed and where breakages are likely.
+- **SRE teams** investigating production incidents
+- **DevOps engineers** correlating failures across services
+- **Platform teams** building autonomous reliability agents
+- **Architects** designing AI-powered troubleshooting workflows
+
+AutoRCA-Core is part of a broader **autonomous operations ecosystem** including:
+- [`awesome-autonomous-ops`](https://github.com/nik-kale/awesome-autonomous-ops) – Curated list of AI ops tools
+- [`Secure-MCP-Gateway`](https://github.com/nik-kale/Secure-MCP-Gateway) – Security-first MCP gateway for ops tools
+- [`Ops-Agent-Desktop`](https://github.com/nik-kale/Ops-Agent-Desktop) – Visual mission control for autonomous ops agents
+- `ADAPT-Agents` – Agent orchestration layer (companion repo)
 
 ---
 
-## 🚀 Getting Started
+## Architecture Overview
 
-> **Prerequisites**
-> - Python 3.10+
-> - Access to an LLM endpoint (OpenAI, Gemini, local model, etc.) – optional for basic rule-based mode.
+AutoRCA-Core follows a **layered architecture** for clarity and extensibility:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      CLI / API Layer                        │
+│            (autorca CLI, Python API, MCP server)            │
+└─────────────────────────────────────────────────────────────┘
+                             │
+┌─────────────────────────────────────────────────────────────┐
+│                     Reasoning Layer                         │
+│   ┌────────────┐  ┌────────────┐  ┌──────────────────┐    │
+│   │   Rules    │  │  LLM (opt) │  │  Reasoning Loop  │    │
+│   │ Heuristics │  │ Interface  │  │  Orchestration   │    │
+│   └────────────┘  └────────────┘  └──────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+                             │
+┌─────────────────────────────────────────────────────────────┐
+│                    Graph Engine Layer                       │
+│   ┌─────────────────────┐  ┌─────────────────────────┐    │
+│   │   Graph Builder     │  │   Graph Queries         │    │
+│   │ (topology + events) │  │ (causal chains, RCA)    │    │
+│   └─────────────────────┘  └─────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+                             │
+┌─────────────────────────────────────────────────────────────┐
+│                    Ingestion Layer                          │
+│   ┌──────┐  ┌─────────┐  ┌────────┐  ┌─────────────┐     │
+│   │ Logs │  │ Metrics │  │ Traces │  │ Configs     │     │
+│   └──────┘  └─────────┘  └────────┘  └─────────────┘     │
+└─────────────────────────────────────────────────────────────┘
+                             │
+┌─────────────────────────────────────────────────────────────┐
+│                Data Sources (files, APIs, streams)          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key concepts:**
+- **Service Graph**: Topology of services and dependencies inferred from traces
+- **Incident Nodes**: Anomalies detected (error spikes, latency, resource exhaustion)
+- **Causal Chains**: Dependency paths showing how failures propagate
+- **Root Cause Candidates**: Ranked list with confidence scores and evidence
+
+---
+
+## Quickstart
+
+### Prerequisites
+- Python 3.10+
+- (Optional) OpenAI or Anthropic API key for LLM-enhanced summaries
+
+### Installation
 
 ```bash
-# Clone the repo
-git clone https://github.com/<your-username>/ADAPT-RCA.git
-cd ADAPT-RCA
+# Clone the repository
+git clone https://github.com/nik-kale/AutoRCA-Core.git
+cd AutoRCA-Core
 
-# (Optional) Create and activate a virtualenv
+# Create a virtual environment
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install the package
+pip install -e .
+
+# Or install with LLM support
+pip install -e ".[llm]"
 ```
 
----
-
-## 🧪 Quickstart Example
-
-### 1. Prepare sample logs
-
-Create a file `sample_logs.jsonl`:
-
-```json
-{"timestamp": "2025-11-10T10:00:00Z", "service": "api-gateway", "level": "ERROR", "message": "Upstream timeout calling user-service"}
-{"timestamp": "2025-11-10T10:00:03Z", "service": "user-service", "level": "ERROR", "message": "DB connection pool exhausted"}
-{"timestamp": "2025-11-10T10:00:05Z", "service": "postgres", "level": "WARN", "message": "Max connections reached"}
-```
-
-### 2. Run ADAPT-RCA in CLI mode
+### Run the Quickstart Example
 
 ```bash
-python -m adapt_rca.cli \
-  --input examples/basic_logs/sample_logs.jsonl \
-  --output results.json
+autorca quickstart
 ```
 
-### 3. Example output (simplified)
+This runs RCA on synthetic data simulating a **database connection pool exhaustion incident**. You'll see:
+- Root cause identified: PostgreSQL connection saturation
+- Causal chain: `postgres → user-service → api-gateway → frontend`
+- Remediation: Scale connection pool, check for leaks
 
-```json
-{
-  "incident_summary": "API latency and errors caused by exhausted DB connections.",
-  "probable_root_causes": [
-    "Connection pool misconfiguration for user-service",
-    "Sudden traffic spike without autoscaling"
-  ],
-  "recommended_actions": [
-    "Increase max DB connections or enable connection pooling at app layer",
-    "Enable autoscaling for user-service based on queue depth"
-  ]
-}
+### Run on Your Own Data
+
+```bash
+autorca run \
+  --logs /path/to/logs \
+  --metrics /path/to/metrics \
+  --symptom "Checkout API returning 500 errors" \
+  --output report.md
 ```
+
+**Supported formats:**
+- Logs: JSON Lines, plain text (auto-parsed)
+- Metrics: CSV, JSON Lines
+- Traces: OpenTelemetry JSON, Jaeger JSON
+- Configs: JSON, YAML (deployment/config change events)
 
 ---
 
-## 🧩 Project Structure
+## Usage as a Library
 
-```
-ADAPT-RCA/
-  src/
-    adapt_rca/
-      __init__.py
-      config.py
-      cli.py
-      ingestion/
-        __init__.py
-        file_loader.py
-      parsing/
-        __init__.py
-        log_parser.py
-      reasoning/
-        __init__.py
-        agent.py
-        heuristics.py
-      graph/
-        __init__.py
-        causal_graph.py
-      reporting/
-        __init__.py
-        formatter.py
-        exporters.py
-  examples/
-    basic_logs/
-      sample_logs.jsonl
-  docs/
-    architecture.md
-    examples.md
-  tests/
-    test_parsing.py
-    test_reasoning.py
-  requirements.txt
-  README.md
-  LICENSE
+```python
+from datetime import datetime
+from autorca_core import run_rca, DataSourcesConfig
+
+# Define the incident time window
+window = (
+    datetime(2025, 11, 10, 10, 0, 0),
+    datetime(2025, 11, 10, 10, 5, 0),
+)
+
+# Configure data sources
+sources = DataSourcesConfig(
+    logs_dir="./logs",
+    metrics_dir="./metrics",
+    traces_dir="./traces",
+)
+
+# Run RCA
+result = run_rca(
+    incident_window=window,
+    primary_symptom="API 500 errors",
+    data_sources=sources,
+)
+
+# Access results
+print(f"Top root cause: {result.root_cause_candidates[0].service}")
+print(f"Confidence: {result.root_cause_candidates[0].confidence:.0%}")
+print(result.summary)
 ```
 
 ---
 
-## 🛠 Configuration
+## How This Fits an Autonomous Ops Stack
 
-You can configure ADAPT-RCA using environment variables or a config file:
-- `ADAPT_RCA_LLM_PROVIDER` – e.g., openai, local
-- `ADAPT_RCA_LLM_MODEL` – e.g., gpt-4.1-mini, gemini-1.5-pro
-- `ADAPT_RCA_MAX_EVENTS` – limit on events per run
-- `ADAPT_RCA_TIME_WINDOW` – time window (in minutes) to group events
+AutoRCA-Core is designed to be a **composable building block** in AI-powered operations workflows:
 
-See [docs/architecture.md](docs/architecture.md) for more details.
+### Integration Patterns
 
----
+1. **Agent-driven troubleshooting**
+   - Autonomous agents (e.g., from `ADAPT-Agents`) call AutoRCA-Core to investigate incidents
+   - RCA results guide next actions: gather more data, escalate, or remediate
 
-## 🔌 Extensibility
+2. **MCP exposure via Secure-MCP-Gateway**
+   - Expose AutoRCA-Core as an MCP tool for Claude Desktop, Ops-Agent-Desktop, or other MCP clients
+   - Enable AI assistants to perform RCA with policy controls and human-in-the-loop approvals
 
-You can extend ADAPT-RCA by:
-- Adding new parsers under `src/adapt_rca/parsing/`
-- Adding new heuristics under `src/adapt_rca/reasoning/heuristics.py`
-- Adding new exporters under `src/adapt_rca/reporting/exporters.py`
-- Plugging into your own observability stack (e.g., shipping JSON into the ingestion layer)
+3. **Visual investigation in Ops-Agent-Desktop**
+   - Ops-Agent-Desktop calls AutoRCA-Core and visualizes causal graphs in real-time
+   - Shows live incident timelines and reasoning steps
 
-Contributions are welcome – see CONTRIBUTING.md.
-
----
-
-## 🧭 Roadmap (High-Level)
-- Web dashboard for visualizing causal graphs
-- Native integration with Prometheus / OpenTelemetry
-- Pluggable topology provider (Kubernetes, service mesh, etc.)
-- Templates for common incident types (DB saturation, DNS issues, auth failures)
-- Examples for security-focused logs
+4. **Runbook automation**
+   - Use AutoRCA-Core to detect root causes, then trigger automated remediation via Ansible, Terraform, or K8s operators
 
 ---
 
-## 📄 License
+## Project Structure
 
-MIT License
+```
+AutoRCA-Core/
+├── autorca_core/              # Main package
+│   ├── ingestion/             # Data loaders (logs, metrics, traces, configs)
+│   ├── model/                 # Data models (events, graphs)
+│   ├── graph_engine/          # Graph construction and querying
+│   ├── reasoning/             # RCA logic (rules, LLM, loop)
+│   ├── outputs/               # Report generation (markdown, JSON, HTML)
+│   └── cli/                   # CLI interface
+├── examples/                  # Example data and scenarios
+│   └── quickstart_local_logs/ # Quickstart synthetic data
+├── tests/                     # Test suite
+├── docs/                      # Architecture and usage docs
+├── pyproject.toml             # Package configuration
+├── README.md                  # This file
+└── LICENSE                    # MIT license
+```
 
 ---
 
-## 🙌 Contributing
+## Extending AutoRCA-Core
 
-Issues, feature requests, and pull requests are welcome.
+AutoRCA-Core is designed for extensibility:
 
-If you use ADAPT-RCA in your organisation, consider:
-- Opening an issue describing your use case
-- Contributing additional parsers or heuristics
-- Sharing anonymized incident examples
+### Add Custom Parsers
+Implement custom log/metric parsers by extending ingestion modules:
+```python
+# autorca_core/ingestion/custom_parser.py
+from autorca_core.model.events import LogEvent
+
+def parse_custom_format(line: str) -> LogEvent:
+    # Your parsing logic
+    ...
+```
+
+### Add Custom Rules
+Add domain-specific heuristics:
+```python
+# autorca_core/reasoning/custom_rules.py
+from autorca_core.reasoning.rules import RootCauseCandidate
+
+def rule_custom_pattern(graph):
+    # Detect custom incident patterns
+    ...
+    return [RootCauseCandidate(...)]
+```
+
+### Integrate Custom LLMs
+Implement the `LLMInterface` protocol:
+```python
+from autorca_core.reasoning.llm import LLMInterface
+
+class MyCustomLLM:
+    def summarize_rca(self, graph, candidates, symptom):
+        # Call your LLM
+        ...
+```
 
 ---
 
-## ⭐ Support
+## Roadmap
 
-If you find ADAPT-RCA useful, consider:
-- Starring the repo ⭐
-- Sharing it with your SRE, DevOps, or Security teams
-- Opening issues with real-world logs (sanitized) to help improve the engine
+- [x] Core graph-based RCA engine
+- [x] Multi-signal ingestion (logs, metrics, traces, configs)
+- [x] Rule-based reasoning with causal chains
+- [x] CLI and Python API
+- [ ] OpenAI and Anthropic LLM integrations
+- [ ] MCP server for tool exposure
+- [ ] Prometheus and OpenTelemetry native connectors
+- [ ] Interactive HTML reports with graph visualizations
+- [ ] Kubernetes and service mesh topology providers
+- [ ] Pre-built RCA templates for common incident types (DB saturation, DNS, auth)
+
+---
+
+## Contributing
+
+Contributions are welcome! This project aims to be a **reference architecture** for autonomous ops tools.
+
+**How to contribute:**
+- Open issues for bugs or feature requests
+- Submit PRs for parsers, heuristics, or integrations
+- Share anonymized incident examples for testing
+- Suggest improvements to the reasoning engine
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
+## Security and Safety
+
+AutoRCA-Core performs **read-only analysis** by default. It does not execute commands or modify systems.
+
+For production use:
+- **Validate data sources**: Ensure logs/metrics are from trusted sources
+- **Sanitize sensitive data**: Remove PII, secrets, and credentials before analysis
+- **Use Secure-MCP-Gateway**: When exposing AutoRCA-Core as a tool, use policy controls and human approvals
+
+---
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+## Acknowledgments
+
+AutoRCA-Core draws inspiration from:
+- Academic research in fault localization and causal inference
+- Production RCA workflows at large-scale SaaS and cloud providers
+- The growing ecosystem of AI-powered operations tools
+
+**Built by [Nik Kale](https://github.com/nik-kale)** as part of an open-source initiative to advance autonomous operations and reliability engineering.
+
+---
+
+## Support
+
+If you find AutoRCA-Core useful:
+- ⭐ **Star the repo** to help others discover it
+- 📢 **Share it** with your SRE, DevOps, and platform teams
+- 🐛 **Open issues** with real-world scenarios (sanitized) to help improve the engine
+- 🤝 **Contribute** parsers, rules, or integrations
+
+For questions and discussions, open a [GitHub issue](https://github.com/nik-kale/AutoRCA-Core/issues).
+
+---
+
+**AutoRCA-Core**: Foundation for autonomous reliability agents. Graph-based RCA over logs, metrics, and traces.
