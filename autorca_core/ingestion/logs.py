@@ -8,10 +8,18 @@ import json
 import re
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from autorca_core.model.events import LogEvent, Severity
 from autorca_core.logging import get_logger
+from autorca_core.validation import (
+    IngestionLimits,
+    validate_path,
+    check_file_size,
+    check_line_length,
+    check_total_events,
+    sanitize_error_message,
+)
 
 logger = get_logger(__name__)
 
@@ -21,6 +29,7 @@ def load_logs(
     time_from: Optional[datetime] = None,
     time_to: Optional[datetime] = None,
     service_filter: Optional[str] = None,
+    limits: Optional[IngestionLimits] = None,
 ) -> List[LogEvent]:
     """
     Load logs from a file or directory.
@@ -30,10 +39,14 @@ def load_logs(
         time_from: Start of time window (inclusive)
         time_to: End of time window (inclusive)
         service_filter: Only include logs from this service
+        limits: Optional ingestion limits for security
 
     Returns:
         List of LogEvent objects
     """
+    if limits is None:
+        limits = IngestionLimits()
+
     source_path = Path(source)
 
     if not source_path.exists():
@@ -42,13 +55,39 @@ def load_logs(
     events = []
 
     if source_path.is_file():
-        events.extend(_load_log_file(source_path))
+        check_file_size(source_path, limits)
+        events.extend(_load_log_file(source_path, limits))
     else:
         # Load all .log, .jsonl, .txt files in directory
         extensions = ['*.log', '*.jsonl', '*.txt']
+<<<<<<< HEAD
         for ext in extensions:
             for file_path in source_path.glob(f"**/{ext}"):
                 events.extend(_load_log_file(file_path))
+=======
+        file_count = 0
+        for ext in extensions:
+            for file_path in source_path.glob(f"**/{ext}"):
+                # Validate path to prevent traversal
+                validate_path(source_path, file_path)
+
+                # Check file count limit
+                file_count += 1
+                if file_count > limits.max_files_per_directory:
+                    print(f"Warning: Reached file limit ({limits.max_files_per_directory}), skipping remaining files")
+                    break
+
+                # Check file size
+                try:
+                    check_file_size(file_path, limits)
+                    events.extend(_load_log_file(file_path, limits))
+
+                    # Check total event count
+                    check_total_events(len(events), limits)
+                except Exception as e:
+                    print(f"Warning: Skipping file {file_path.name}: {sanitize_error_message(e, file_path)}")
+                    continue
+>>>>>>> 0ac8e01 (security: add input validation and size limits for data ingestion)
 
     # Apply filters
     if time_from:
@@ -61,7 +100,7 @@ def load_logs(
     return sorted(events, key=lambda e: e.timestamp)
 
 
-def _load_log_file(file_path: Path) -> List[LogEvent]:
+def _load_log_file(file_path: Path, limits: IngestionLimits) -> List[LogEvent]:
     """Load a single log file."""
     events = []
 
@@ -72,6 +111,9 @@ def _load_log_file(file_path: Path) -> List[LogEvent]:
                 continue
 
             try:
+                # Check line length
+                check_line_length(line, limits)
+
                 # Try JSON parsing first
                 event = _parse_json_log(line)
                 if event:
@@ -83,7 +125,11 @@ def _load_log_file(file_path: Path) -> List[LogEvent]:
                         events.append(event)
             except Exception as e:
                 # Log parsing errors are non-fatal
+<<<<<<< HEAD
                 logger.warning(f"Failed to parse line {line_num} in {file_path}: {e}")
+=======
+                print(f"Warning: Failed to parse line {line_num} in {file_path.name}: {sanitize_error_message(e)}")
+>>>>>>> 0ac8e01 (security: add input validation and size limits for data ingestion)
 
     return events
 
@@ -96,8 +142,8 @@ def _parse_json_log(line: str) -> Optional[LogEvent]:
         # Extract timestamp
         timestamp_str = data.get('timestamp') or data.get('time') or data.get('@timestamp')
         if not timestamp_str:
-            # Use current time as fallback
-            timestamp = datetime.utcnow()
+            # Use current time as fallback (timezone-aware)
+            timestamp = datetime.now(timezone.utc)
         else:
             timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
 
@@ -151,7 +197,7 @@ def _parse_text_log(line: str) -> Optional[LogEvent]:
         try:
             timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
         except ValueError:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
 
         level = _parse_severity(level_str)
 
@@ -165,7 +211,7 @@ def _parse_text_log(line: str) -> Optional[LogEvent]:
 
     # If pattern doesn't match, create a basic log event
     return LogEvent(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         service="unknown",
         message=line,
         level=Severity.INFO,
