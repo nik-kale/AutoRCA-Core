@@ -44,8 +44,10 @@ def load_metrics(
         metrics.extend(_load_metrics_file(source_path))
     else:
         # Load all .csv, .jsonl, .json files in directory
-        for file_path in source_path.glob("**/*.{csv,jsonl,json}"):
-            metrics.extend(_load_metrics_file(file_path))
+        extensions = ['*.csv', '*.jsonl', '*.json']
+        for ext in extensions:
+            for file_path in source_path.glob(f"**/{ext}"):
+                metrics.extend(_load_metrics_file(file_path))
 
     # Apply filters
     if time_from:
