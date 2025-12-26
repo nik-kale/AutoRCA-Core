@@ -43,8 +43,10 @@ def load_traces(
         spans.extend(_load_trace_file(source_path))
     else:
         # Load all .jsonl, .json files in directory
-        for file_path in source_path.glob("**/*.{jsonl,json}"):
-            spans.extend(_load_trace_file(file_path))
+        extensions = ['*.jsonl', '*.json']
+        for ext in extensions:
+            for file_path in source_path.glob(f"**/{ext}"):
+                spans.extend(_load_trace_file(file_path))
 
     # Apply filters
     if time_from:

@@ -42,8 +42,10 @@ def load_logs(
         events.extend(_load_log_file(source_path))
     else:
         # Load all .log, .jsonl, .txt files in directory
-        for file_path in source_path.glob("**/*.{log,jsonl,txt}"):
-            events.extend(_load_log_file(file_path))
+        extensions = ['*.log', '*.jsonl', '*.txt']
+        for ext in extensions:
+            for file_path in source_path.glob(f"**/{ext}"):
+                events.extend(_load_log_file(file_path))
 
     # Apply filters
     if time_from:
