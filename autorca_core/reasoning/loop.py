@@ -17,6 +17,7 @@ from autorca_core.graph_engine.queries import GraphQueries
 from autorca_core.reasoning.rules import apply_rules, RootCauseCandidate
 from autorca_core.reasoning.llm import LLMInterface, DummyLLM
 from autorca_core.logging import get_logger
+from autorca_core.config import ThresholdConfig
 
 logger = get_logger(__name__)
 
@@ -75,6 +76,7 @@ def run_rca(
     primary_symptom: str,
     data_sources: DataSourcesConfig,
     llm: Optional[LLMInterface] = None,
+    thresholds: Optional[ThresholdConfig] = None,
 ) -> RCARunResult:
     """
     Run root cause analysis.
@@ -92,6 +94,7 @@ def run_rca(
         primary_symptom: Description of the symptom (e.g., "Checkout API 500 errors")
         data_sources: Configuration for data sources
         llm: Optional LLM interface for enhanced analysis
+        thresholds: Optional threshold configuration for anomaly detection
 
     Returns:
         RCARunResult with root cause candidates and analysis
@@ -139,6 +142,7 @@ def run_rca(
         logger.info(f"  Loaded {len(configs)} config changes")
 
     # Step 2: Build service graph
+<<<<<<< HEAD
     logger.info("Building service graph...")
     graph = build_service_graph(logs=logs, metrics=metrics, traces=traces, configs=configs)
     logger.info(f"  Graph: {len(graph.services)} services, {len(graph.dependencies)} dependencies, {len(graph.incidents)} incidents")
@@ -147,6 +151,16 @@ def run_rca(
     logger.info("Applying RCA rules...")
     candidates = apply_rules(graph)
     logger.info(f"  Identified {len(candidates)} root cause candidates")
+=======
+    print("Building service graph...")
+    graph = build_service_graph(logs=logs, metrics=metrics, traces=traces, configs=configs, thresholds=thresholds)
+    print(f"  Graph: {len(graph.services)} services, {len(graph.dependencies)} dependencies, {len(graph.incidents)} incidents")
+
+    # Step 3: Run rule-based analysis
+    print("Applying RCA rules...")
+    candidates = apply_rules(graph, thresholds=thresholds)
+    print(f"  Identified {len(candidates)} root cause candidates")
+>>>>>>> b2361b9 (feat: add configurable detection thresholds for anomaly detection)
 
     # Step 4: Generate summary using LLM
     logger.info("Generating RCA summary...")
@@ -197,6 +211,7 @@ def run_rca_from_files(
     configs_path: Optional[str] = None,
     primary_symptom: str = "Unknown incident",
     window_minutes: int = 60,
+    thresholds: Optional[ThresholdConfig] = None,
 ) -> RCARunResult:
     """
     Convenience function to run RCA from file paths.
@@ -210,6 +225,7 @@ def run_rca_from_files(
         configs_path: Path to configs file/directory
         primary_symptom: Description of the symptom
         window_minutes: Size of the analysis window in minutes
+        thresholds: Optional threshold configuration for anomaly detection
 
     Returns:
         RCARunResult
@@ -245,4 +261,4 @@ def run_rca_from_files(
         configs_dir=configs_path,
     )
 
-    return run_rca((time_from, time_to), primary_symptom, sources)
+    return run_rca((time_from, time_to), primary_symptom, sources, thresholds=thresholds)
