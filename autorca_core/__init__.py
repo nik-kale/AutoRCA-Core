@@ -14,6 +14,7 @@ from autorca_core.model.graph import Service, Dependency, IncidentNode
 from autorca_core.reasoning.loop import run_rca, RCARunResult
 from autorca_core.logging import configure_logging, get_logger
 from autorca_core.config import ThresholdConfig
+from autorca_core.validation import IngestionLimits, ValidationError
 
 __all__ = [
     "Event",
@@ -28,4 +29,6 @@ __all__ = [
     "configure_logging",
     "get_logger",
     "ThresholdConfig",
+    "IngestionLimits",
+    "ValidationError",
 ]
