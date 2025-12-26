@@ -10,6 +10,9 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from autorca_core.model.events import Span
+from autorca_core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def load_traces(
@@ -91,7 +94,7 @@ def _load_trace_file(file_path: Path) -> List[Span]:
                 if span:
                     spans.append(span)
             except json.JSONDecodeError as e:
-                print(f"Warning: Failed to parse JSON line {line_num} in {file_path}: {e}")
+                logger.warning(f"Failed to parse JSON line {line_num} in {file_path}: {e}")
 
     return spans
 

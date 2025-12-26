@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 from autorca_core.reasoning.loop import run_rca, run_rca_from_files, DataSourcesConfig
 from autorca_core.outputs.reports import generate_markdown_report, save_report
+from autorca_core.logging import configure_logging
 
 
 def main():
@@ -29,6 +30,18 @@ def main():
     quickstart_parser = subparsers.add_parser(
         "quickstart",
         help="Run quickstart example with synthetic data",
+    )
+    quickstart_parser.add_argument(
+        "--log-level",
+        type=str,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Log level (default: INFO)",
+    )
+    quickstart_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress all logging output",
     )
 
     # Run command
@@ -87,8 +100,28 @@ def main():
         default="markdown",
         help="Output format (default: markdown)",
     )
+    run_parser.add_argument(
+        "--log-level",
+        type=str,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Log level (default: INFO)",
+    )
+    run_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress all logging output",
+    )
 
     args = parser.parse_args()
+
+    # Configure logging
+    if hasattr(args, 'quiet') and args.quiet:
+        configure_logging(level="CRITICAL")
+    elif hasattr(args, 'log_level'):
+        configure_logging(level=args.log_level)
+    else:
+        configure_logging(level="INFO")
 
     if args.command == "quickstart":
         run_quickstart()
