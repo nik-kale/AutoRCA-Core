@@ -4,7 +4,7 @@ Graph builder: Construct service topology and dependency graphs from observabili
 Builds a ServiceGraph from logs, metrics, traces, and config changes.
 """
 
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
 
@@ -17,6 +17,7 @@ from autorca_core.model.graph import (
     IncidentNode,
     IncidentType,
 )
+from autorca_core.config import ThresholdConfig
 
 
 class GraphBuilder:
@@ -29,9 +30,10 @@ class GraphBuilder:
     - Incident nodes (detected anomalies/errors)
     """
 
-    def __init__(self):
+    def __init__(self, thresholds: Optional[ThresholdConfig] = None):
         self.graph = ServiceGraph()
         self._service_metadata: Dict[str, Dict] = defaultdict(dict)
+        self.thresholds = thresholds or ThresholdConfig()
 
     def add_logs(self, logs: List[LogEvent]) -> None:
         """
@@ -154,17 +156,17 @@ class GraphBuilder:
         for log in error_logs:
             by_service[log.service].append(log)
 
-        # Detect spikes (simple threshold: 3+ errors)
+        # Detect spikes using configurable thresholds
         for service, service_errors in by_service.items():
-            if len(service_errors) >= 3:
+            if len(service_errors) >= self.thresholds.error_spike_count:
                 # Sort by timestamp
                 service_errors.sort(key=lambda e: e.timestamp)
                 first_error = service_errors[0]
                 last_error = service_errors[-1]
 
-                # If errors span less than 5 minutes, it's a spike
+                # If errors span less than threshold window, it's a spike
                 time_span = (last_error.timestamp - first_error.timestamp).total_seconds()
-                if time_span <= 300:  # 5 minutes
+                if time_span <= self.thresholds.error_spike_window_seconds:
                     evidence = [f"Error: {e.message}" for e in service_errors[:5]]  # Show first 5
                     self.graph.add_incident(IncidentNode(
                         service=service,
@@ -193,11 +195,11 @@ class GraphBuilder:
             # Sort by timestamp
             metric_points.sort(key=lambda m: m.timestamp)
 
-            # Simple threshold-based detection
+            # Simple threshold-based detection using configurable thresholds
             if 'latency' in metric_name.lower() or 'duration' in metric_name.lower():
-                # Detect latency spike (value > 1000ms)
-                high_latency = [m for m in metric_points if m.value > 1000]
-                if len(high_latency) >= 2:
+                # Detect latency spike using configured threshold
+                high_latency = [m for m in metric_points if m.value > self.thresholds.latency_spike_ms]
+                if len(high_latency) >= self.thresholds.latency_spike_count:
                     self.graph.add_incident(IncidentNode(
                         service=service,
                         incident_type=IncidentType.LATENCY_SPIKE,
@@ -208,9 +210,9 @@ class GraphBuilder:
                     ))
 
             elif 'cpu' in metric_name.lower() or 'memory' in metric_name.lower():
-                # Detect resource exhaustion (value > 90%)
-                high_usage = [m for m in metric_points if m.value > 90]
-                if len(high_usage) >= 2:
+                # Detect resource exhaustion using configured threshold
+                high_usage = [m for m in metric_points if m.value > self.thresholds.resource_exhaustion_percent]
+                if len(high_usage) >= self.thresholds.resource_exhaustion_count:
                     self.graph.add_incident(IncidentNode(
                         service=service,
                         incident_type=IncidentType.RESOURCE_EXHAUSTION,
@@ -247,6 +249,7 @@ def build_service_graph(
     metrics: List[MetricPoint] = None,
     traces: List[Span] = None,
     configs: List[ConfigChange] = None,
+    thresholds: Optional[ThresholdConfig] = None,
 ) -> ServiceGraph:
     """
     Convenience function to build a ServiceGraph from observability data.
@@ -256,11 +259,12 @@ def build_service_graph(
         metrics: Metric data points
         traces: Trace spans
         configs: Config/deployment changes
+        thresholds: Optional threshold configuration for anomaly detection
 
     Returns:
         Constructed ServiceGraph
     """
-    builder = GraphBuilder()
+    builder = GraphBuilder(thresholds=thresholds)
 
     if logs:
         builder.add_logs(logs)

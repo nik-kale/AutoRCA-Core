@@ -4,12 +4,13 @@ Rule-based RCA heuristics.
 Simple, deterministic rules for identifying root causes without requiring an LLM.
 """
 
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Optional
 from dataclasses import dataclass
 from datetime import timedelta
 
 from autorca_core.model.graph import ServiceGraph, IncidentNode, IncidentType
 from autorca_core.graph_engine.queries import GraphQueries, CausalChain
+from autorca_core.config import ThresholdConfig
 
 
 @dataclass
@@ -44,7 +45,7 @@ class RootCauseCandidate:
         }
 
 
-def apply_rules(graph: ServiceGraph) -> List[RootCauseCandidate]:
+def apply_rules(graph: ServiceGraph, thresholds: Optional[ThresholdConfig] = None) -> List[RootCauseCandidate]:
     """
     Apply rule-based heuristics to identify root cause candidates.
 
@@ -57,15 +58,19 @@ def apply_rules(graph: ServiceGraph) -> List[RootCauseCandidate]:
 
     Args:
         graph: ServiceGraph with incidents and dependencies
+        thresholds: Optional threshold configuration for correlation windows
 
     Returns:
         List of RootCauseCandidate objects, sorted by confidence (highest first)
     """
+    if thresholds is None:
+        thresholds = ThresholdConfig()
+
     candidates: List[RootCauseCandidate] = []
     queries = GraphQueries(graph)
 
     # Rule 1: Recent deployments/config changes
-    candidates.extend(_rule_recent_changes(graph, queries))
+    candidates.extend(_rule_recent_changes(graph, queries, thresholds))
 
     # Rule 2: Resource exhaustion
     candidates.extend(_rule_resource_exhaustion(graph, queries))
@@ -85,7 +90,7 @@ def apply_rules(graph: ServiceGraph) -> List[RootCauseCandidate]:
     return candidates
 
 
-def _rule_recent_changes(graph: ServiceGraph, queries: GraphQueries) -> List[RootCauseCandidate]:
+def _rule_recent_changes(graph: ServiceGraph, queries: GraphQueries, thresholds: ThresholdConfig) -> List[RootCauseCandidate]:
     """
     Rule: Services with recent deployments or config changes are strong root cause candidates.
     """
@@ -111,11 +116,11 @@ def _rule_recent_changes(graph: ServiceGraph, queries: GraphQueries) -> List[Roo
             if i.incident_type not in (IncidentType.DEPLOYMENT, IncidentType.CONFIG_CHANGE)
         ]
 
-        # Check if other incidents occurred shortly after the change
+        # Check if other incidents occurred shortly after the change using configurable threshold
         for change in change_incidents:
             nearby_incidents = [
                 i for i in other_incidents
-                if abs((i.timestamp - change.timestamp).total_seconds()) < 600  # Within 10 minutes
+                if abs((i.timestamp - change.timestamp).total_seconds()) < thresholds.change_correlation_seconds
             ]
 
             if nearby_incidents:
