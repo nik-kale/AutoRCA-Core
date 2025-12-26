@@ -16,6 +16,9 @@ from autorca_core.graph_engine.builder import build_service_graph
 from autorca_core.graph_engine.queries import GraphQueries
 from autorca_core.reasoning.rules import apply_rules, RootCauseCandidate
 from autorca_core.reasoning.llm import LLMInterface, DummyLLM
+from autorca_core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -112,7 +115,7 @@ def run_rca(
         llm = DummyLLM()
 
     # Step 1: Load observability data
-    print(f"Loading data for window: {time_from} to {time_to}")
+    logger.info(f"Loading data for window: {time_from} to {time_to}")
 
     logs: List[LogEvent] = []
     metrics: List[MetricPoint] = []
@@ -121,32 +124,32 @@ def run_rca(
 
     if data_sources.logs_dir:
         logs = load_logs(data_sources.logs_dir, time_from, time_to)
-        print(f"  Loaded {len(logs)} log events")
+        logger.info(f"  Loaded {len(logs)} log events")
 
     if data_sources.metrics_dir:
         metrics = load_metrics(data_sources.metrics_dir, time_from, time_to)
-        print(f"  Loaded {len(metrics)} metric points")
+        logger.info(f"  Loaded {len(metrics)} metric points")
 
     if data_sources.traces_dir:
         traces = load_traces(data_sources.traces_dir, time_from, time_to)
-        print(f"  Loaded {len(traces)} trace spans")
+        logger.info(f"  Loaded {len(traces)} trace spans")
 
     if data_sources.configs_dir:
         configs = load_configs(data_sources.configs_dir, time_from, time_to)
-        print(f"  Loaded {len(configs)} config changes")
+        logger.info(f"  Loaded {len(configs)} config changes")
 
     # Step 2: Build service graph
-    print("Building service graph...")
+    logger.info("Building service graph...")
     graph = build_service_graph(logs=logs, metrics=metrics, traces=traces, configs=configs)
-    print(f"  Graph: {len(graph.services)} services, {len(graph.dependencies)} dependencies, {len(graph.incidents)} incidents")
+    logger.info(f"  Graph: {len(graph.services)} services, {len(graph.dependencies)} dependencies, {len(graph.incidents)} incidents")
 
     # Step 3: Run rule-based analysis
-    print("Applying RCA rules...")
+    logger.info("Applying RCA rules...")
     candidates = apply_rules(graph)
-    print(f"  Identified {len(candidates)} root cause candidates")
+    logger.info(f"  Identified {len(candidates)} root cause candidates")
 
     # Step 4: Generate summary using LLM
-    print("Generating RCA summary...")
+    logger.info("Generating RCA summary...")
     summary = llm.summarize_rca(graph, candidates, primary_symptom)
 
     # Step 5: Build incident timeline

@@ -11,6 +11,9 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from autorca_core.model.events import MetricPoint
+from autorca_core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def load_metrics(
@@ -67,7 +70,7 @@ def _load_metrics_file(file_path: Path) -> List[MetricPoint]:
     elif file_path.suffix in ('.jsonl', '.json'):
         return _parse_json_metrics(file_path)
     else:
-        print(f"Warning: Unsupported metrics file format: {file_path}")
+        logger.warning(f"Unsupported metrics file format: {file_path}")
         return []
 
 
@@ -107,7 +110,7 @@ def _parse_csv_metrics(file_path: Path) -> List[MetricPoint]:
                     raw_data=row,
                 ))
             except (ValueError, KeyError) as e:
-                print(f"Warning: Failed to parse CSV row in {file_path}: {e}")
+                logger.warning(f"Failed to parse CSV row in {file_path}: {e}")
 
     return metrics
 
@@ -146,7 +149,7 @@ def _parse_json_metrics(file_path: Path) -> List[MetricPoint]:
                 if metric:
                     metrics.append(metric)
             except json.JSONDecodeError as e:
-                print(f"Warning: Failed to parse JSON line {line_num} in {file_path}: {e}")
+                logger.warning(f"Failed to parse JSON line {line_num} in {file_path}: {e}")
 
     return metrics
 

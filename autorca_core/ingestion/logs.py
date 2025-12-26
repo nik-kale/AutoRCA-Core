@@ -11,6 +11,9 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from autorca_core.model.events import LogEvent, Severity
+from autorca_core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def load_logs(
@@ -78,7 +81,7 @@ def _load_log_file(file_path: Path) -> List[LogEvent]:
                         events.append(event)
             except Exception as e:
                 # Log parsing errors are non-fatal
-                print(f"Warning: Failed to parse line {line_num} in {file_path}: {e}")
+                logger.warning(f"Failed to parse line {line_num} in {file_path}: {e}")
 
     return events
 

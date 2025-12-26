@@ -11,6 +11,9 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from autorca_core.model.events import ConfigChange
+from autorca_core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def load_configs(
@@ -63,7 +66,7 @@ def _load_config_file(file_path: Path) -> List[ConfigChange]:
     elif file_path.suffix in ('.jsonl', '.json'):
         return _parse_json_configs(file_path)
     else:
-        print(f"Warning: Unsupported config file format: {file_path}")
+        logger.warning(f"Unsupported config file format: {file_path}")
         return []
 
 
@@ -97,7 +100,7 @@ def _parse_json_configs(file_path: Path) -> List[ConfigChange]:
                 if change:
                     changes.append(change)
             except json.JSONDecodeError as e:
-                print(f"Warning: Failed to parse JSON line {line_num} in {file_path}: {e}")
+                logger.warning(f"Failed to parse JSON line {line_num} in {file_path}: {e}")
 
     return changes
 
@@ -120,7 +123,7 @@ def _parse_yaml_configs(file_path: Path) -> List[ConfigChange]:
                 if change:
                     changes.append(change)
     except yaml.YAMLError as e:
-        print(f"Warning: Failed to parse YAML file {file_path}: {e}")
+        logger.warning(f"Failed to parse YAML file {file_path}: {e}")
 
     return changes
 

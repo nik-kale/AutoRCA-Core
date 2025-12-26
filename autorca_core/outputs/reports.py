@@ -7,6 +7,9 @@ from typing import Dict, Any
 from datetime import datetime
 
 from autorca_core.reasoning.loop import RCARunResult
+from autorca_core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def generate_markdown_report(result: RCARunResult) -> str:
@@ -215,4 +218,4 @@ def save_report(result: RCARunResult, output_path: str, format: str = "markdown"
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(content)
 
-    print(f"Report saved to: {output_path}")
+    logger.info(f"Report saved to: {output_path}")
