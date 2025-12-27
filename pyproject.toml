@@ -56,6 +56,16 @@ llm = [
     "anthropic>=0.18",
 ]
 
+mcp = [
+    "mcp>=0.1.0",
+]
+
+all = [
+    "openai>=1.0",
+    "anthropic>=0.18",
+    "mcp>=0.1.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/nik-kale/AutoRCA-Core"
 Repository = "https://github.com/nik-kale/AutoRCA-Core"

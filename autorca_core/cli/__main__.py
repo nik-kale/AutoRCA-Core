@@ -16,6 +16,17 @@ from autorca_core.outputs.reports import generate_markdown_report, save_report
 from autorca_core.logging import configure_logging
 
 
+def run_mcp_server():
+    """Start the MCP server."""
+    try:
+        from autorca_core.mcp.server import start_mcp_server
+        start_mcp_server()
+    except ImportError:
+        print("Error: MCP server requires the 'mcp' package.")
+        print("Install with: pip install 'autorca-core[mcp]'")
+        sys.exit(1)
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -30,6 +41,12 @@ def main():
     quickstart_parser = subparsers.add_parser(
         "quickstart",
         help="Run quickstart example with synthetic data",
+    )
+    
+    # MCP server command
+    mcp_parser = subparsers.add_parser(
+        "mcp-server",
+        help="Start MCP server for Claude Desktop integration",
     )
     quickstart_parser.add_argument(
         "--log-level",
@@ -127,6 +144,8 @@ def main():
         run_quickstart()
     elif args.command == "run":
         run_custom_rca(args)
+    elif args.command == "mcp-server":
+        run_mcp_server()
     else:
         parser.print_help()
         sys.exit(1)
