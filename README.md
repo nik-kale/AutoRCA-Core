@@ -144,7 +144,7 @@ autorca run \
 
 ```python
 from datetime import datetime
-from autorca_core import run_rca, DataSourcesConfig
+from autorca_core import run_rca, DataSourcesConfig, AnthropicLLM
 
 # Define the incident time window
 window = (
@@ -170,6 +170,35 @@ result = run_rca(
 print(f"Top root cause: {result.root_cause_candidates[0].service}")
 print(f"Confidence: {result.root_cause_candidates[0].confidence:.0%}")
 print(result.summary)
+```
+
+### With LLM Enhancement (Anthropic Claude)
+
+```python
+import os
+from autorca_core import run_rca, DataSourcesConfig, AnthropicLLM
+
+# Initialize Anthropic LLM (requires ANTHROPIC_API_KEY env var)
+llm = AnthropicLLM(
+    api_key=os.getenv("ANTHROPIC_API_KEY"),
+    model="claude-3-5-sonnet-20241022",
+    max_tokens=2048,
+)
+
+# Run RCA with LLM enhancement
+result = run_rca(
+    incident_window=window,
+    primary_symptom="API 500 errors",
+    data_sources=sources,
+    llm=llm,  # Add LLM for enhanced summaries
+)
+
+# Get comprehensive AI-generated analysis
+print(result.summary)  # Structured RCA with executive summary, impact assessment, and remediation
+
+# Check token usage and costs
+stats = llm.get_usage_stats()
+print(f"Tokens used: {stats['total_tokens']}, Cost: ${stats['total_cost_usd']:.4f}")
 ```
 
 ---
