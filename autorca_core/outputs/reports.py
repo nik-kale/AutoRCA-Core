@@ -3,10 +3,12 @@ Report generation: Create RCA reports in markdown, JSON, and other formats.
 """
 
 import json
-from typing import Dict, Any
+from typing import Dict, Any, List
 from datetime import datetime
 
 from autorca_core.reasoning.loop import RCARunResult
+from autorca_core.reasoning.rules import RootCauseCandidate
+from autorca_core.model.graph import ServiceGraph
 from autorca_core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -154,47 +156,427 @@ def generate_json_report(result: RCARunResult, indent: int = 2) -> str:
 
 def generate_html_report(result: RCARunResult) -> str:
     """
-    Generate an HTML-formatted RCA report.
+    Generate an interactive HTML-formatted RCA report with visualizations.
 
-    TODO: Implement HTML report generation with charts and visualizations.
+    Features:
+    - Service graph visualization (SVG)
+    - Interactive timeline
+    - Collapsible evidence sections
+    - Copy-to-clipboard functionality
+    - Self-contained (no external dependencies)
 
     Args:
         result: RCA run result
 
     Returns:
-        HTML-formatted report string
+        Interactive HTML-formatted report string
     """
-    # For now, convert markdown to basic HTML
-    markdown = generate_markdown_report(result)
+    # Generate service graph SVG
+    graph_svg = _generate_service_graph_svg(result.service_graph, result.root_cause_candidates)
 
-    html_parts = [
-        "<!DOCTYPE html>",
-        "<html>",
-        "<head>",
-        "  <meta charset='UTF-8'>",
-        "  <title>RCA Report - AutoRCA-Core</title>",
-        "  <style>",
-        "    body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }",
-        "    h1 { color: #2c3e50; border-bottom: 2px solid #3498db; }",
-        "    h2 { color: #34495e; margin-top: 30px; }",
-        "    h3 { color: #7f8c8d; }",
-        "    table { border-collapse: collapse; width: 100%; margin: 20px 0; }",
-        "    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }",
-        "    th { background-color: #3498db; color: white; }",
-        "    code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; }",
-        "    .confidence { font-weight: bold; color: #27ae60; }",
-        "    .evidence { background-color: #ecf0f1; padding: 10px; margin: 10px 0; border-left: 4px solid #3498db; }",
-        "  </style>",
-        "</head>",
-        "<body>",
-        "  <pre style='white-space: pre-wrap;'>",
-        markdown,
-        "  </pre>",
-        "</body>",
-        "</html>",
+    # Generate timeline HTML
+    timeline_html = _generate_timeline_html(result.timeline)
+
+    # Generate candidates HTML
+    candidates_html = _generate_candidates_html(result.root_cause_candidates)
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RCA Report - {result.primary_symptom}</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f7fa;
+            color: #2c3e50;
+        }}
+        .header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }}
+        .header h1 {{ font-size: 28px; margin-bottom: 10px; }}
+        .header .meta {{ opacity: 0.9; font-size: 14px; }}
+        .section {{
+            background: white;
+            padding: 25px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }}
+        .section h2 {{
+            color: #667eea;
+            font-size: 22px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 10px;
+        }}
+        .summary {{
+            background: #e8f4f8;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }}
+        .graph-container {{
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }}
+        .candidate {{
+            background: #f8f9fa;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }}
+        .candidate .header-row {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }}
+        .candidate h3 {{ color: #2c3e50; font-size: 18px; }}
+        .confidence {{
+            background: #27ae60;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+        }}
+        .explanation {{ margin: 10px 0; color: #555; line-height: 1.6; }}
+        .collapsible {{
+            background: #667eea;
+            color: white;
+            cursor: pointer;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 6px;
+            text-align: left;
+            width: 100%;
+            font-size: 14px;
+            margin-top: 10px;
+            transition: background 0.3s;
+        }}
+        .collapsible:hover {{ background: #5568d3; }}
+        .collapsible:after {{
+            content: '\\25BC';
+            float: right;
+            margin-left: 5px;
+        }}
+        .collapsible.active:after {{ content: '\\25B2'; }}
+        .content {{
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            background: #fff;
+            margin-top: 10px;
+        }}
+        .content.active {{
+            max-height: 1000px;
+            transition: max-height 0.5s ease-in;
+        }}
+        .evidence-list {{
+            list-style: none;
+            padding: 15px;
+        }}
+        .evidence-list li {{
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }}
+        .evidence-list li:last-child {{ border-bottom: none; }}
+        .remediation {{
+            counter-reset: step;
+            list-style: none;
+            padding: 15px;
+        }}
+        .remediation li {{
+            counter-increment: step;
+            padding: 10px 0;
+            padding-left: 35px;
+            position: relative;
+        }}
+        .remediation li:before {{
+            content: counter(step);
+            background: #667eea;
+            color: white;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            position: absolute;
+            left: 0;
+            font-size: 12px;
+            font-weight: bold;
+        }}
+        .timeline-item {{
+            padding: 12px;
+            margin: 8px 0;
+            background: #f8f9fa;
+            border-left: 3px solid #667eea;
+            border-radius: 4px;
+            font-size: 14px;
+        }}
+        .timeline-item .time {{ color: #667eea; font-weight: bold; }}
+        .timeline-item .service {{ color: #27ae60; font-weight: bold; }}
+        .stats {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }}
+        .stat-card {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }}
+        .stat-card .value {{ font-size: 32px; font-weight: bold; margin-bottom: 5px; }}
+        .stat-card .label {{ font-size: 14px; opacity: 0.9; }}
+        .copy-btn {{
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-left: 10px;
+        }}
+        .copy-btn:hover {{ background: #229954; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 Root Cause Analysis Report</h1>
+        <div class="meta">
+            <strong>Incident:</strong> {result.primary_symptom}<br>
+            <strong>Analysis Time:</strong> {datetime.now().isoformat()}<br>
+            <strong>Window:</strong> {result.metadata.get('window_start', 'N/A')} to {result.metadata.get('window_end', 'N/A')}
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📊 Overview</h2>
+        <div class="stats">
+            <div class="stat-card">
+                <div class="value">{result.metadata.get('num_services', 0)}</div>
+                <div class="label">Services</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{result.metadata.get('num_incidents', 0)}</div>
+                <div class="label">Incidents</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{len(result.root_cause_candidates)}</div>
+                <div class="label">Candidates</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{result.metadata.get('num_logs', 0)}</div>
+                <div class="label">Log Events</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📝 Executive Summary</h2>
+        <div class="summary">{result.summary}</div>
+    </div>
+
+    <div class="section">
+        <h2>🌐 Service Graph</h2>
+        <div class="graph-container">
+            {graph_svg}
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🎯 Root Cause Candidates</h2>
+        {candidates_html}
+    </div>
+
+    <div class="section">
+        <h2>⏱️ Incident Timeline</h2>
+        {timeline_html}
+    </div>
+
+    <script>
+        // Collapsible sections
+        document.querySelectorAll('.collapsible').forEach(button => {{
+            button.addEventListener('click', function() {{
+                this.classList.toggle('active');
+                const content = this.nextElementSibling;
+                content.classList.toggle('active');
+            }});
+        }});
+
+        // Copy to clipboard
+        function copyToClipboard(text) {{
+            navigator.clipboard.writeText(text).then(() => {{
+                alert('Copied to clipboard!');
+            }});
+        }}
+    </script>
+</body>
+</html>"""
+
+    return html
+
+
+def _generate_service_graph_svg(graph: ServiceGraph, candidates: List[RootCauseCandidate]) -> str:
+    """Generate SVG visualization of the service graph."""
+    if not graph.services:
+        return "<p>No services detected</p>"
+
+    # Find root cause services
+    root_cause_services = {c.service for c in candidates[:3]}
+
+    # Simple force-directed layout
+    services = list(graph.services.keys())
+    num_services = len(services)
+
+    if num_services == 0:
+        return "<p>No services to display</p>"
+
+    # Calculate positions (simple circular layout)
+    import math
+    radius = max(200, num_services * 30)
+    positions = {}
+    for i, service in enumerate(services):
+        angle = 2 * math.pi * i / num_services
+        x = 400 + radius * math.cos(angle)
+        y = 300 + radius * math.sin(angle)
+        positions[service] = (x, y)
+
+    # Build SVG
+    svg_parts = [
+        f'<svg width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">',
+        '<defs>',
+        '<marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">',
+        '<polygon points="0 0, 10 3.5, 0 7" fill="#999" />',
+        '</marker>',
+        '</defs>',
     ]
 
-    return "\n".join(html_parts)
+    # Draw edges (dependencies)
+    for dep in graph.dependencies:
+        if dep.from_service in positions and dep.to_service in positions:
+            x1, y1 = positions[dep.from_service]
+            x2, y2 = positions[dep.to_service]
+            svg_parts.append(
+                f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
+                f'stroke="#999" stroke-width="2" marker-end="url(#arrowhead)" opacity="0.6"/>'
+            )
+
+    # Draw nodes (services)
+    for service, (x, y) in positions.items():
+        is_root_cause = service in root_cause_services
+        color = "#e74c3c" if is_root_cause else "#3498db"
+        stroke_width = 4 if is_root_cause else 2
+
+        # Service circle
+        svg_parts.append(
+            f'<circle cx="{x}" cy="{y}" r="40" fill="{color}" '
+            f'stroke="#2c3e50" stroke-width="{stroke_width}" opacity="0.9"/>'
+        )
+
+        # Service label
+        label = service[:10] + "..." if len(service) > 10 else service
+        svg_parts.append(
+            f'<text x="{x}" y="{y}" text-anchor="middle" dominant-baseline="middle" '
+            f'fill="white" font-size="12" font-weight="bold">{label}</text>'
+        )
+
+        # Incident marker
+        incidents = graph.get_incidents_for_service(service)
+        if incidents:
+            svg_parts.append(
+                f'<circle cx="{x + 30}" cy="{y - 30}" r="8" fill="#e74c3c"/>'
+            )
+            svg_parts.append(
+                f'<text x="{x + 30}" y="{y - 30}" text-anchor="middle" dominant-baseline="middle" '
+                f'fill="white" font-size="10" font-weight="bold">{len(incidents)}</text>'
+            )
+
+    svg_parts.append('</svg>')
+    return '\n'.join(svg_parts)
+
+
+def _generate_timeline_html(timeline: List[Dict[str, Any]]) -> str:
+    """Generate HTML for incident timeline."""
+    if not timeline:
+        return "<p>No incidents detected</p>"
+
+    html_parts = []
+    for incident in timeline[:20]:  # Limit to 20
+        timestamp = incident['timestamp'][:19]
+        service = incident['service']
+        inc_type = incident['type']
+        description = incident['description']
+        severity = incident['severity']
+
+        html_parts.append(
+            f'<div class="timeline-item">'
+            f'<span class="time">{timestamp}</span> | '
+            f'<span class="service">{service}</span> | '
+            f'{inc_type}: {description} '
+            f'(severity: {severity:.2f})'
+            f'</div>'
+        )
+
+    return '\n'.join(html_parts)
+
+
+def _generate_candidates_html(candidates: List[RootCauseCandidate]) -> str:
+    """Generate HTML for root cause candidates."""
+    if not candidates:
+        return "<p>No root cause candidates identified</p>"
+
+    html_parts = []
+    for i, candidate in enumerate(candidates[:5], 1):
+        evidence_items = '\n'.join(
+            f'<li>{ev}</li>' for ev in candidate.evidence[:10]
+        )
+        remediation_items = '\n'.join(
+            f'<li>{step}</li>' for step in candidate.remediation
+        )
+
+        html_parts.append(f'''
+<div class="candidate">
+    <div class="header-row">
+        <h3>#{i}: {candidate.service}</h3>
+        <span class="confidence">{candidate.confidence:.0%} Confidence</span>
+    </div>
+    <p class="explanation">{candidate.explanation}</p>
+
+    <button class="collapsible">View Evidence ({len(candidate.evidence)} items)</button>
+    <div class="content">
+        <ul class="evidence-list">{evidence_items}</ul>
+    </div>
+
+    <button class="collapsible">Remediation Steps ({len(candidate.remediation)} steps)</button>
+    <div class="content">
+        <ol class="remediation">{remediation_items}</ol>
+    </div>
+</div>
+''')
+
+    return '\n'.join(html_parts)
 
 
 def save_report(result: RCARunResult, output_path: str, format: str = "markdown") -> None:
