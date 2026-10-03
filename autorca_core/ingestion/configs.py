@@ -4,14 +4,16 @@ Config/deployment change ingestion: Load config and deployment change events.
 Used to correlate incidents with recent changes that may have caused issues.
 """
 
-import json
 import yaml
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import date, datetime
 
-from autorca_core.model.events import ConfigChange
+from autorca_core.model.events import ChangeType, ConfigChange, to_utc
+from autorca_core.ingestion._jsonio import read_json_records
+from autorca_core.ingestion._sources import load_source
 from autorca_core.logging import get_logger
+from autorca_core.validation import IngestionLimits
 
 logger = get_logger(__name__)
 
@@ -21,6 +23,7 @@ def load_configs(
     time_from: Optional[datetime] = None,
     time_to: Optional[datetime] = None,
     service_filter: Optional[str] = None,
+    limits: Optional[IngestionLimits] = None,
 ) -> List[ConfigChange]:
     """
     Load config/deployment change events from a file or directory.
@@ -30,6 +33,7 @@ def load_configs(
         time_from: Start of time window (inclusive)
         time_to: End of time window (inclusive)
         service_filter: Only include changes for this service
+        limits: Optional ingestion limits (defaults to IngestionLimits())
 
     Returns:
         List of ConfigChange objects
@@ -39,19 +43,21 @@ def load_configs(
     if not source_path.exists():
         raise FileNotFoundError(f"Config source not found: {source}")
 
-    changes = []
-
-    if source_path.is_file():
-        changes.extend(_load_config_file(source_path))
-    else:
-        # Load all .jsonl, .json, .yaml, .yml files in directory
-        for file_path in source_path.glob("**/*.{jsonl,json,yaml,yml}"):
-            changes.extend(_load_config_file(file_path))
+    # A directory loads all .jsonl, .json, .yaml and .yml files below it.
+    # (pathlib globs do not support brace expansion, so one pattern each.)
+    changes = load_source(
+        source_path,
+        ["*.jsonl", "*.json", "*.yaml", "*.yml"],
+        _load_config_file,
+        limits or IngestionLimits(),
+    )
 
     # Apply filters
     if time_from:
+        time_from = to_utc(time_from)
         changes = [c for c in changes if c.timestamp >= time_from]
     if time_to:
+        time_to = to_utc(time_to)
         changes = [c for c in changes if c.timestamp <= time_to]
     if service_filter:
         changes = [c for c in changes if c.service == service_filter]
@@ -61,9 +67,9 @@ def load_configs(
 
 def _load_config_file(file_path: Path) -> List[ConfigChange]:
     """Load a single config change file."""
-    if file_path.suffix in ('.yaml', '.yml'):
+    if file_path.suffix in (".yaml", ".yml"):
         return _parse_yaml_configs(file_path)
-    elif file_path.suffix in ('.jsonl', '.json'):
+    elif file_path.suffix in (".jsonl", ".json"):
         return _parse_json_configs(file_path)
     else:
         logger.warning(f"Unsupported config file format: {file_path}")
@@ -73,35 +79,10 @@ def _load_config_file(file_path: Path) -> List[ConfigChange]:
 def _parse_json_configs(file_path: Path) -> List[ConfigChange]:
     """Parse JSON or JSON Lines config change file."""
     changes = []
-
-    with open(file_path, 'r', encoding='utf-8') as f:
-        # Try to parse as JSON array first
-        try:
-            data = json.load(f)
-            if isinstance(data, list):
-                for item in data:
-                    change = _parse_config_item(item)
-                    if change:
-                        changes.append(change)
-                return changes
-        except json.JSONDecodeError:
-            # Fall back to JSON Lines
-            f.seek(0)
-
-        # Parse as JSON Lines
-        for line_num, line in enumerate(f, start=1):
-            line = line.strip()
-            if not line:
-                continue
-
-            try:
-                item = json.loads(line)
-                change = _parse_config_item(item)
-                if change:
-                    changes.append(change)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse JSON line {line_num} in {file_path}: {e}")
-
+    for item in read_json_records(file_path):
+        change = _parse_config_item(item)
+        if change:
+            changes.append(change)
     return changes
 
 
@@ -110,7 +91,7 @@ def _parse_yaml_configs(file_path: Path) -> List[ConfigChange]:
     changes = []
 
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
             if isinstance(data, list):
@@ -130,32 +111,38 @@ def _parse_yaml_configs(file_path: Path) -> List[ConfigChange]:
 
 def _parse_config_item(item: Dict[str, Any]) -> Optional[ConfigChange]:
     """Parse a single config change item."""
+    if not isinstance(item, dict):
+        return None
     try:
-        timestamp_str = item.get('timestamp') or item.get('time') or item.get('deployed_at')
+        timestamp_str = item.get("timestamp") or item.get("time") or item.get("deployed_at")
         if not timestamp_str:
             return None
 
-        timestamp = datetime.fromisoformat(str(timestamp_str).replace('Z', '+00:00'))
-        service = item.get('service') or item.get('service_name', 'unknown')
+        # YAML may already have parsed an unquoted timestamp into a datetime/date
+        if not isinstance(timestamp_str, (datetime, date)):
+            timestamp_str = str(timestamp_str)
+        timestamp = to_utc(timestamp_str)
+        service = item.get("service") or item.get("service_name", "unknown")
 
         # Determine change type
-        change_type_val = item.get('change_type') or item.get('type', 'config')
-        if change_type_val.lower() in ('deploy', 'deployment', 'release'):
-            change_type = 'deployment'
-        elif change_type_val.lower() in ('scale', 'scaling', 'autoscale'):
-            change_type = 'scaling'
-        elif change_type_val.lower() in ('config', 'configuration'):
-            change_type = 'config'
+        change_type_val = str(item.get("change_type") or item.get("type") or "config").lower()
+        change_type: ChangeType
+        if change_type_val in ("deploy", "deployment", "release"):
+            change_type = "deployment"
+        elif change_type_val in ("scale", "scaling", "autoscale"):
+            change_type = "scaling"
+        elif change_type_val in ("config", "configuration"):
+            change_type = "config"
         else:
-            change_type = 'other'
+            change_type = "other"
 
-        description = item.get('description') or item.get('message') or ''
-        version_before = item.get('version_before') or item.get('old_version')
-        version_after = item.get('version_after') or item.get('new_version') or item.get('version')
-        changed_by = item.get('changed_by') or item.get('deployed_by') or item.get('user')
+        description = item.get("description") or item.get("message") or ""
+        version_before = item.get("version_before") or item.get("old_version")
+        version_after = item.get("version_after") or item.get("new_version") or item.get("version")
+        changed_by = item.get("changed_by") or item.get("deployed_by") or item.get("user")
 
         # Extract tags
-        tags = item.get('tags', {})
+        tags = item.get("tags", {})
         if isinstance(tags, dict):
             tags = {str(k): str(v) for k, v in tags.items()}
         else:
@@ -172,5 +159,5 @@ def _parse_config_item(item: Dict[str, Any]) -> Optional[ConfigChange]:
             tags=tags,
             raw_data=item,
         )
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, TypeError):
         return None

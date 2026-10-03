@@ -168,10 +168,33 @@ Check the Claude Desktop logs:
 
 ## Security Considerations
 
+The paths passed to every tool are chosen by the model, and log content can steer
+the model, so treat tool arguments as untrusted.
+
+- **Restrict readable paths.** Set `AUTORCA_MCP_ALLOWED_ROOTS` to the directories
+  the tools may read (separated by `:` on macOS/Linux, `;` on Windows). Paths are
+  resolved, including `..` and symlinks, before the check, and any path outside
+  every root is refused. When the variable is unset the server logs a warning and
+  can read any file it has permission to read.
+
+  ```json
+  {
+    "mcpServers": {
+      "autorca": {
+        "command": "autorca",
+        "args": ["mcp-server"],
+        "env": {
+          "AUTORCA_MCP_ALLOWED_ROOTS": "/var/log/app:/var/metrics"
+        }
+      }
+    }
+  }
+  ```
+
 - The MCP server runs with the same permissions as Claude Desktop
 - Ensure log files don't contain sensitive information
-- Consider using read-only file paths
-- Use the validation limits to prevent resource exhaustion
+- All loaders apply the default `IngestionLimits` (file size, file count and
+  total event caps) to bound memory use on large directories
 
 ## Advanced Configuration
 

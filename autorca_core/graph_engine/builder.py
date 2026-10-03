@@ -5,7 +5,6 @@ Builds a ServiceGraph from logs, metrics, traces, and config changes.
 """
 
 from typing import List, Dict, Set, Tuple, Optional
-from datetime import datetime, timedelta
 from collections import defaultdict
 
 from autorca_core.model.events import LogEvent, MetricPoint, Span, ConfigChange
@@ -104,11 +103,13 @@ class GraphBuilder:
                         # Parent service depends on child service
                         dep_key = (parent_span.service, span.service)
                         if dep_key not in dependencies_found:
-                            self.graph.add_dependency(Dependency(
-                                from_service=parent_span.service,
-                                to_service=span.service,
-                                dependency_type=DependencyType.HTTP,
-                            ))
+                            self.graph.add_dependency(
+                                Dependency(
+                                    from_service=parent_span.service,
+                                    to_service=span.service,
+                                    dependency_type=DependencyType.HTTP,
+                                )
+                            )
                             dependencies_found.add(dep_key)
 
         # Detect error spans
@@ -128,17 +129,25 @@ class GraphBuilder:
                 self.graph.add_service(Service(name=change.service, service_type="unknown"))
 
             # Create an incident node for the change
-            incident_type = IncidentType.DEPLOYMENT if change.change_type == "deployment" else IncidentType.CONFIG_CHANGE
-            description = change.description or f"{change.change_type}: {change.version_after or 'unknown'}"
+            incident_type = (
+                IncidentType.DEPLOYMENT
+                if change.change_type == "deployment"
+                else IncidentType.CONFIG_CHANGE
+            )
+            description = (
+                change.description or f"{change.change_type}: {change.version_after or 'unknown'}"
+            )
 
-            self.graph.add_incident(IncidentNode(
-                service=change.service,
-                incident_type=incident_type,
-                timestamp=change.timestamp,
-                severity=0.6,  # Changes are moderately important
-                description=description,
-                evidence=[f"{change.change_type} at {change.timestamp.isoformat()}"],
-            ))
+            self.graph.add_incident(
+                IncidentNode(
+                    service=change.service,
+                    incident_type=incident_type,
+                    timestamp=change.timestamp,
+                    severity=0.6,  # Changes are moderately important
+                    description=description,
+                    evidence=[f"{change.change_type} at {change.timestamp.isoformat()}"],
+                )
+            )
 
     def build(self) -> ServiceGraph:
         """Return the constructed ServiceGraph."""
@@ -156,26 +165,25 @@ class GraphBuilder:
         for log in error_logs:
             by_service[log.service].append(log)
 
-        # Detect spikes using configurable thresholds
+        # Detect spikes using configurable thresholds: enough errors inside one
+        # error_spike_window_seconds window (not across the whole data set, so a
+        # stray earlier error does not mask a later burst)
         for service, service_errors in by_service.items():
-            if len(service_errors) >= self.thresholds.error_spike_count:
-                # Sort by timestamp
-                service_errors.sort(key=lambda e: e.timestamp)
-                first_error = service_errors[0]
-                last_error = service_errors[-1]
-
-                # If errors span less than threshold window, it's a spike
-                time_span = (last_error.timestamp - first_error.timestamp).total_seconds()
-                if time_span <= self.thresholds.error_spike_window_seconds:
-                    evidence = [f"Error: {e.message}" for e in service_errors[:5]]  # Show first 5
-                    self.graph.add_incident(IncidentNode(
+            service_errors.sort(key=lambda e: e.timestamp)
+            burst = _densest_window(service_errors, self.thresholds.error_spike_window_seconds)
+            if len(burst) >= self.thresholds.error_spike_count:
+                time_span = (burst[-1].timestamp - burst[0].timestamp).total_seconds()
+                evidence = [f"Error: {e.message}" for e in burst[:5]]  # Show first 5
+                self.graph.add_incident(
+                    IncidentNode(
                         service=service,
                         incident_type=IncidentType.ERROR_SPIKE,
-                        timestamp=first_error.timestamp,
+                        timestamp=burst[0].timestamp,
                         severity=0.8,
-                        description=f"{len(service_errors)} errors in {time_span:.0f}s",
+                        description=f"{len(burst)} errors in {time_span:.0f}s",
                         evidence=evidence,
-                    ))
+                    )
+                )
 
     def _detect_metric_anomalies(self, service: str, metrics: List[MetricPoint]) -> None:
         """
@@ -196,31 +204,44 @@ class GraphBuilder:
             metric_points.sort(key=lambda m: m.timestamp)
 
             # Simple threshold-based detection using configurable thresholds
-            if 'latency' in metric_name.lower() or 'duration' in metric_name.lower():
+            if "latency" in metric_name.lower() or "duration" in metric_name.lower():
                 # Detect latency spike using configured threshold
-                high_latency = [m for m in metric_points if m.value > self.thresholds.latency_spike_ms]
+                high_latency = [
+                    m for m in metric_points if m.value > self.thresholds.latency_spike_ms
+                ]
                 if len(high_latency) >= self.thresholds.latency_spike_count:
-                    self.graph.add_incident(IncidentNode(
-                        service=service,
-                        incident_type=IncidentType.LATENCY_SPIKE,
-                        timestamp=high_latency[0].timestamp,
-                        severity=0.7,
-                        description=f"High latency detected: {metric_name}",
-                        evidence=[f"{m.metric_name}={m.value:.2f}{m.unit or ''}" for m in high_latency[:3]],
-                    ))
+                    self.graph.add_incident(
+                        IncidentNode(
+                            service=service,
+                            incident_type=IncidentType.LATENCY_SPIKE,
+                            timestamp=high_latency[0].timestamp,
+                            severity=0.7,
+                            description=f"High latency detected: {metric_name}",
+                            evidence=[
+                                f"{m.metric_name}={m.value:.2f}{m.unit or ''}"
+                                for m in high_latency[:3]
+                            ],
+                        )
+                    )
 
-            elif 'cpu' in metric_name.lower() or 'memory' in metric_name.lower():
+            elif "cpu" in metric_name.lower() or "memory" in metric_name.lower():
                 # Detect resource exhaustion using configured threshold
-                high_usage = [m for m in metric_points if m.value > self.thresholds.resource_exhaustion_percent]
+                high_usage = [
+                    m
+                    for m in metric_points
+                    if m.value > self.thresholds.resource_exhaustion_percent
+                ]
                 if len(high_usage) >= self.thresholds.resource_exhaustion_count:
-                    self.graph.add_incident(IncidentNode(
-                        service=service,
-                        incident_type=IncidentType.RESOURCE_EXHAUSTION,
-                        timestamp=high_usage[0].timestamp,
-                        severity=0.9,
-                        description=f"High resource usage: {metric_name}",
-                        evidence=[f"{m.metric_name}={m.value:.2f}%" for m in high_usage[:3]],
-                    ))
+                    self.graph.add_incident(
+                        IncidentNode(
+                            service=service,
+                            incident_type=IncidentType.RESOURCE_EXHAUSTION,
+                            timestamp=high_usage[0].timestamp,
+                            severity=0.9,
+                            description=f"High resource usage: {metric_name}",
+                            evidence=[f"{m.metric_name}={m.value:.2f}%" for m in high_usage[:3]],
+                        )
+                    )
 
     def _detect_error_spans(self, error_spans: List[Span]) -> None:
         """Detect error patterns in trace spans."""
@@ -229,26 +250,47 @@ class GraphBuilder:
         for span in error_spans:
             by_service[span.service].append(span)
 
-        # Detect error spikes (3+ error spans)
+        # Detect error spikes using the same configurable thresholds as logs
         for service, service_errors in by_service.items():
-            if len(service_errors) >= 3:
-                service_errors.sort(key=lambda s: s.timestamp)
-                evidence = [f"Span error: {s.operation_name} (status={s.status_code})" for s in service_errors[:5]]
-                self.graph.add_incident(IncidentNode(
-                    service=service,
-                    incident_type=IncidentType.ERROR_SPIKE,
-                    timestamp=service_errors[0].timestamp,
-                    severity=0.8,
-                    description=f"{len(service_errors)} failed spans",
-                    evidence=evidence,
-                ))
+            service_errors.sort(key=lambda s: s.timestamp)
+            burst = _densest_window(service_errors, self.thresholds.error_spike_window_seconds)
+            if len(burst) >= self.thresholds.error_spike_count:
+                evidence = [
+                    f"Span error: {s.operation_name} (status={s.status_code})" for s in burst[:5]
+                ]
+                self.graph.add_incident(
+                    IncidentNode(
+                        service=service,
+                        incident_type=IncidentType.ERROR_SPIKE,
+                        timestamp=burst[0].timestamp,
+                        severity=0.8,
+                        description=f"{len(burst)} failed spans",
+                        evidence=evidence,
+                    )
+                )
+
+
+def _densest_window(items: list, window_seconds: float) -> list:
+    """
+    Return the longest run of timestamp-sorted items spanning at most window_seconds.
+
+    Ties keep the earliest run.
+    """
+    best_start, best_end = 0, -1
+    start = 0
+    for end in range(len(items)):
+        while (items[end].timestamp - items[start].timestamp).total_seconds() > window_seconds:
+            start += 1
+        if end - start > best_end - best_start:
+            best_start, best_end = start, end
+    return items[best_start : best_end + 1]
 
 
 def build_service_graph(
-    logs: List[LogEvent] = None,
-    metrics: List[MetricPoint] = None,
-    traces: List[Span] = None,
-    configs: List[ConfigChange] = None,
+    logs: Optional[List[LogEvent]] = None,
+    metrics: Optional[List[MetricPoint]] = None,
+    traces: Optional[List[Span]] = None,
+    configs: Optional[List[ConfigChange]] = None,
     thresholds: Optional[ThresholdConfig] = None,
 ) -> ServiceGraph:
     """

@@ -7,7 +7,7 @@ Provides utilities to find causal chains, hotspots, and correlation patterns.
 from typing import List, Set, Dict, Tuple
 from dataclasses import dataclass
 
-from autorca_core.model.graph import ServiceGraph, IncidentNode, Dependency
+from autorca_core.model.graph import ServiceGraph, IncidentNode
 
 
 @dataclass
@@ -17,6 +17,7 @@ class CausalChain:
 
     Example: DB latency → API timeouts → Frontend errors
     """
+
     incidents: List[IncidentNode]
     services: List[str]
     score: float  # Confidence score (0.0 - 1.0)
@@ -49,7 +50,9 @@ class GraphQueries:
         """
         severity_map: Dict[str, float] = {}
         for incident in self.graph.incidents:
-            severity_map[incident.service] = severity_map.get(incident.service, 0.0) + incident.severity
+            severity_map[incident.service] = (
+                severity_map.get(incident.service, 0.0) + incident.severity
+            )
 
         sorted_services = sorted(severity_map.items(), key=lambda x: x[1], reverse=True)
         return sorted_services[:top_n]
@@ -198,12 +201,14 @@ class GraphQueries:
                     chain_incidents.extend(self.graph.get_incidents_for_service(service))
 
                 explanation = self._generate_chain_explanation(new_path)
-                chains.append(CausalChain(
-                    incidents=chain_incidents,
-                    services=new_path,
-                    score=0.0,  # Will be scored later
-                    explanation=explanation,
-                ))
+                chains.append(
+                    CausalChain(
+                        incidents=chain_incidents,
+                        services=new_path,
+                        score=0.0,  # Will be scored later
+                        explanation=explanation,
+                    )
+                )
 
             # Continue exploration
             self._explore_chains(new_path, new_visited, chains, max_length)
@@ -221,8 +226,10 @@ class GraphQueries:
         total_severity = sum(i.severity for i in chain.incidents)
         score += total_severity
 
-        # Bonus for temporal ordering
-        incidents_by_service = {i.service: i for i in chain.incidents}
+        # Bonus for temporal ordering, using each service's earliest incident
+        incidents_by_service: Dict[str, IncidentNode] = {}
+        for incident in sorted(chain.incidents, key=lambda i: i.timestamp):
+            incidents_by_service.setdefault(incident.service, incident)
         properly_ordered = True
         for i in range(len(chain.services) - 1):
             service_a = chain.services[i]

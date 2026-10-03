@@ -9,17 +9,18 @@ Usage:
 import sys
 import argparse
 from pathlib import Path
-from datetime import datetime, timedelta
 
 from autorca_core.reasoning.loop import run_rca, run_rca_from_files, DataSourcesConfig
 from autorca_core.outputs.reports import generate_markdown_report, save_report
 from autorca_core.logging import configure_logging
+from autorca_core.model.events import to_utc
 
 
 def run_mcp_server():
     """Start the MCP server."""
     try:
         from autorca_core.mcp.server import start_mcp_server
+
         start_mcp_server()
     except ImportError:
         print("Error: MCP server requires the 'mcp' package.")
@@ -42,9 +43,9 @@ def main():
         "quickstart",
         help="Run quickstart example with synthetic data",
     )
-    
+
     # MCP server command
-    mcp_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "mcp-server",
         help="Start MCP server for Claude Desktop integration",
     )
@@ -133,9 +134,9 @@ def main():
     args = parser.parse_args()
 
     # Configure logging
-    if hasattr(args, 'quiet') and args.quiet:
+    if hasattr(args, "quiet") and args.quiet:
         configure_logging(level="CRITICAL")
-    elif hasattr(args, 'log_level'):
+    elif hasattr(args, "log_level"):
         configure_logging(level=args.log_level)
     else:
         configure_logging(level="INFO")
@@ -205,39 +206,49 @@ def run_quickstart():
     except Exception as e:
         print(f"Error running quickstart: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
 
+def _status(message: str = "") -> None:
+    """Print progress text to stderr so stdout carries only the report."""
+    print(message, file=sys.stderr)
+
+
 def run_custom_rca(args):
     """Run RCA on custom data."""
-    print("=" * 80)
-    print("AutoRCA-Core: Running RCA")
-    print("=" * 80)
-    print()
+    _status("=" * 80)
+    _status("AutoRCA-Core: Running RCA")
+    _status("=" * 80)
+    _status()
 
     # Validate inputs
     logs_path = Path(args.logs)
     if not logs_path.exists():
-        print(f"Error: Logs path not found: {logs_path}")
+        _status(f"Error: Logs path not found: {logs_path}")
         sys.exit(1)
 
     # Parse time window if provided
     time_from = None
     time_to = None
 
+    if bool(args.time_from) != bool(args.time_to):
+        _status("Error: --from and --to must be given together")
+        sys.exit(1)
+
     if args.time_from and args.time_to:
         try:
-            time_from = datetime.fromisoformat(args.time_from.replace('Z', '+00:00'))
-            time_to = datetime.fromisoformat(args.time_to.replace('Z', '+00:00'))
-            print(f"Time window: {time_from} to {time_to}")
+            time_from = to_utc(args.time_from)
+            time_to = to_utc(args.time_to)
+            _status(f"Time window: {time_from} to {time_to}")
         except ValueError as e:
-            print(f"Error parsing time window: {e}")
+            _status(f"Error parsing time window: {e}")
             sys.exit(1)
     else:
-        print("No time window specified - will analyze all data")
+        _status("No time window specified - will analyze all data")
 
-    print()
+    _status()
 
     try:
         # Run RCA
@@ -267,19 +278,22 @@ def run_custom_rca(args):
                 print(generate_markdown_report(result))
             elif args.format == "json":
                 from autorca_core.outputs.reports import generate_json_report
+
                 print(generate_json_report(result))
             else:
                 from autorca_core.outputs.reports import generate_html_report
+
                 print(generate_html_report(result))
 
-        print()
-        print("=" * 80)
-        print("RCA completed successfully!")
-        print("=" * 80)
+        _status()
+        _status("=" * 80)
+        _status("RCA completed successfully!")
+        _status("=" * 80)
 
     except Exception as e:
-        print(f"Error running RCA: {e}")
+        _status(f"Error running RCA: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

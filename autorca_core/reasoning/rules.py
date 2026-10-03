@@ -4,12 +4,11 @@ Rule-based RCA heuristics.
 Simple, deterministic rules for identifying root causes without requiring an LLM.
 """
 
-from typing import List, Dict, Set, Optional
+from typing import List, Dict, Optional
 from dataclasses import dataclass
-from datetime import timedelta
 
-from autorca_core.model.graph import ServiceGraph, IncidentNode, IncidentType
-from autorca_core.graph_engine.queries import GraphQueries, CausalChain
+from autorca_core.model.graph import ServiceGraph, IncidentType
+from autorca_core.graph_engine.queries import GraphQueries
 from autorca_core.config import ThresholdConfig
 
 
@@ -26,6 +25,7 @@ class RootCauseCandidate:
         evidence: Supporting evidence (log lines, metrics, etc.)
         remediation: Suggested remediation steps
     """
+
     service: str
     incident_type: IncidentType
     confidence: float
@@ -45,7 +45,9 @@ class RootCauseCandidate:
         }
 
 
-def apply_rules(graph: ServiceGraph, thresholds: Optional[ThresholdConfig] = None) -> List[RootCauseCandidate]:
+def apply_rules(
+    graph: ServiceGraph, thresholds: Optional[ThresholdConfig] = None
+) -> List[RootCauseCandidate]:
     """
     Apply rule-based heuristics to identify root cause candidates.
 
@@ -87,10 +89,39 @@ def apply_rules(graph: ServiceGraph, thresholds: Optional[ThresholdConfig] = Non
     # Sort by confidence (highest first)
     candidates.sort(key=lambda c: c.confidence, reverse=True)
 
-    return candidates
+    return _merge_duplicate_candidates(candidates)
 
 
-def _rule_recent_changes(graph: ServiceGraph, queries: GraphQueries, thresholds: ThresholdConfig) -> List[RootCauseCandidate]:
+def _merge_duplicate_candidates(candidates: List[RootCauseCandidate]) -> List[RootCauseCandidate]:
+    """
+    Collapse candidates that several rules raised for the same service and incident type.
+
+    Without this, one failing database can fill the whole top-N list. The
+    highest-confidence candidate is kept (input must be sorted by confidence), and
+    evidence and remediation lines from the others are appended without repeats.
+    """
+    merged: Dict[tuple, RootCauseCandidate] = {}
+    for candidate in candidates:
+        key = (candidate.service, candidate.incident_type)
+        kept = merged.get(key)
+        if kept is None:
+            merged[key] = RootCauseCandidate(
+                service=candidate.service,
+                incident_type=candidate.incident_type,
+                confidence=candidate.confidence,
+                explanation=candidate.explanation,
+                evidence=list(candidate.evidence),
+                remediation=list(candidate.remediation),
+            )
+            continue
+        kept.evidence.extend(e for e in candidate.evidence if e not in kept.evidence)
+        kept.remediation.extend(r for r in candidate.remediation if r not in kept.remediation)
+    return list(merged.values())
+
+
+def _rule_recent_changes(
+    graph: ServiceGraph, queries: GraphQueries, thresholds: ThresholdConfig
+) -> List[RootCauseCandidate]:
     """
     Rule: Services with recent deployments or config changes are strong root cause candidates.
     """
@@ -103,7 +134,8 @@ def _rule_recent_changes(graph: ServiceGraph, queries: GraphQueries, thresholds:
 
         # Find deployment/config change incidents
         change_incidents = [
-            i for i in incidents
+            i
+            for i in incidents
             if i.incident_type in (IncidentType.DEPLOYMENT, IncidentType.CONFIG_CHANGE)
         ]
 
@@ -112,37 +144,46 @@ def _rule_recent_changes(graph: ServiceGraph, queries: GraphQueries, thresholds:
 
         # Get other (non-change) incidents
         other_incidents = [
-            i for i in incidents
+            i
+            for i in incidents
             if i.incident_type not in (IncidentType.DEPLOYMENT, IncidentType.CONFIG_CHANGE)
         ]
 
-        # Check if other incidents occurred shortly after the change using configurable threshold
+        # Check if other incidents occurred shortly after the change using configurable
+        # threshold. Incidents that started before the change cannot have been caused by it.
         for change in change_incidents:
             nearby_incidents = [
-                i for i in other_incidents
-                if abs((i.timestamp - change.timestamp).total_seconds()) < thresholds.change_correlation_seconds
+                i
+                for i in other_incidents
+                if 0
+                <= (i.timestamp - change.timestamp).total_seconds()
+                < thresholds.change_correlation_seconds
             ]
 
             if nearby_incidents:
                 evidence = [change.description] + [i.description for i in nearby_incidents[:3]]
-                candidates.append(RootCauseCandidate(
-                    service=service,
-                    incident_type=change.incident_type,
-                    confidence=0.9,
-                    explanation=f"Recent {change.incident_type.value} in {service} followed by errors",
-                    evidence=evidence,
-                    remediation=[
-                        f"Review recent {change.incident_type.value} in {service}",
-                        f"Consider rolling back to previous version",
-                        "Check deployment logs and config diffs",
-                    ],
-                ))
+                candidates.append(
+                    RootCauseCandidate(
+                        service=service,
+                        incident_type=change.incident_type,
+                        confidence=0.9,
+                        explanation=f"Recent {change.incident_type.value} in {service} followed by errors",
+                        evidence=evidence,
+                        remediation=[
+                            f"Review recent {change.incident_type.value} in {service}",
+                            "Consider rolling back to previous version",
+                            "Check deployment logs and config diffs",
+                        ],
+                    )
+                )
                 break  # Only create one candidate per service
 
     return candidates
 
 
-def _rule_resource_exhaustion(graph: ServiceGraph, queries: GraphQueries) -> List[RootCauseCandidate]:
+def _rule_resource_exhaustion(
+    graph: ServiceGraph, queries: GraphQueries
+) -> List[RootCauseCandidate]:
     """
     Rule: Services with resource exhaustion (CPU, memory, connections) are strong candidates.
     """
@@ -150,18 +191,20 @@ def _rule_resource_exhaustion(graph: ServiceGraph, queries: GraphQueries) -> Lis
 
     for incident in graph.incidents:
         if incident.incident_type == IncidentType.RESOURCE_EXHAUSTION:
-            candidates.append(RootCauseCandidate(
-                service=incident.service,
-                incident_type=incident.incident_type,
-                confidence=0.85,
-                explanation=f"Resource exhaustion in {incident.service}: {incident.description}",
-                evidence=incident.evidence,
-                remediation=[
-                    f"Scale up {incident.service} resources (CPU, memory, connections)",
-                    "Check for resource leaks or inefficient queries",
-                    "Review recent traffic patterns and scaling policies",
-                ],
-            ))
+            candidates.append(
+                RootCauseCandidate(
+                    service=incident.service,
+                    incident_type=incident.incident_type,
+                    confidence=0.85,
+                    explanation=f"Resource exhaustion in {incident.service}: {incident.description}",
+                    evidence=incident.evidence,
+                    remediation=[
+                        f"Scale up {incident.service} resources (CPU, memory, connections)",
+                        "Check for resource leaks or inefficient queries",
+                        "Review recent traffic patterns and scaling policies",
+                    ],
+                )
+            )
 
     return candidates
 
@@ -184,29 +227,34 @@ def _rule_leaf_errors(graph: ServiceGraph, queries: GraphQueries) -> List[RootCa
             # This is a leaf service with errors - strong root cause candidate
             service_incidents = graph.get_incidents_for_service(service)
             error_incidents = [
-                i for i in service_incidents
+                i
+                for i in service_incidents
                 if i.incident_type in (IncidentType.ERROR_SPIKE, IncidentType.LATENCY_SPIKE)
             ]
 
             if error_incidents:
                 incident = error_incidents[0]  # Use the first/most severe
-                candidates.append(RootCauseCandidate(
-                    service=service,
-                    incident_type=incident.incident_type,
-                    confidence=0.75,
-                    explanation=f"{service} has errors with no failing dependencies",
-                    evidence=incident.evidence,
-                    remediation=[
-                        f"Investigate internal errors in {service}",
-                        "Check application logs for exceptions and stack traces",
-                        "Review recent code changes or deployments",
-                    ],
-                ))
+                candidates.append(
+                    RootCauseCandidate(
+                        service=service,
+                        incident_type=incident.incident_type,
+                        confidence=0.75,
+                        explanation=f"{service} has errors with no failing dependencies",
+                        evidence=incident.evidence,
+                        remediation=[
+                            f"Investigate internal errors in {service}",
+                            "Check application logs for exceptions and stack traces",
+                            "Review recent code changes or deployments",
+                        ],
+                    )
+                )
 
     return candidates
 
 
-def _rule_foundational_services(graph: ServiceGraph, queries: GraphQueries) -> List[RootCauseCandidate]:
+def _rule_foundational_services(
+    graph: ServiceGraph, queries: GraphQueries
+) -> List[RootCauseCandidate]:
     """
     Rule: Errors in foundational services (databases, caches) that many services depend on
     are likely root causes.
@@ -225,18 +273,20 @@ def _rule_foundational_services(graph: ServiceGraph, queries: GraphQueries) -> L
         incidents = graph.get_incidents_for_service(service)
         if incidents:
             incident = incidents[0]  # Use the first/most severe
-            candidates.append(RootCauseCandidate(
-                service=service,
-                incident_type=incident.incident_type,
-                confidence=0.8,
-                explanation=f"{service} is a foundational service with incidents affecting multiple dependents",
-                evidence=incident.evidence,
-                remediation=[
-                    f"Investigate {service} - it's a critical dependency",
-                    "Check for database/cache connection issues or saturation",
-                    "Review query performance and connection pooling",
-                ],
-            ))
+            candidates.append(
+                RootCauseCandidate(
+                    service=service,
+                    incident_type=incident.incident_type,
+                    confidence=0.8,
+                    explanation=f"{service} is a foundational service with incidents affecting multiple dependents",
+                    evidence=incident.evidence,
+                    remediation=[
+                        f"Investigate {service} - it's a critical dependency",
+                        "Check for database/cache connection issues or saturation",
+                        "Review query performance and connection pooling",
+                    ],
+                )
+            )
 
     return candidates
 
@@ -259,16 +309,18 @@ def _rule_causal_chains(graph: ServiceGraph, queries: GraphQueries) -> List[Root
 
         if root_incidents:
             incident = root_incidents[0]
-            candidates.append(RootCauseCandidate(
-                service=root_service,
-                incident_type=incident.incident_type,
-                confidence=min(0.7, chain.score),  # Cap at 0.7 for chain-based inference
-                explanation=f"Root of causal chain: {chain.explanation}",
-                evidence=incident.evidence,
-                remediation=[
-                    f"Fix issues in {root_service} to resolve downstream failures",
-                    f"Causal chain: {' → '.join(chain.services)}",
-                ],
-            ))
+            candidates.append(
+                RootCauseCandidate(
+                    service=root_service,
+                    incident_type=incident.incident_type,
+                    confidence=min(0.7, chain.score),  # Cap at 0.7 for chain-based inference
+                    explanation=f"Root of causal chain: {chain.explanation}",
+                    evidence=incident.evidence,
+                    remediation=[
+                        f"Fix issues in {root_service} to resolve downstream failures",
+                        f"Causal chain: {' → '.join(chain.services)}",
+                    ],
+                )
+            )
 
     return candidates

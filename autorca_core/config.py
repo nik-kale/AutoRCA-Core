@@ -5,8 +5,7 @@ Provides configurable thresholds and settings for anomaly detection and RCA anal
 """
 
 import os
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass
@@ -71,7 +70,9 @@ class ThresholdConfig:
             error_spike_window_seconds=int(os.getenv("AUTORCA_ERROR_SPIKE_WINDOW", 300)),
             latency_spike_ms=float(os.getenv("AUTORCA_LATENCY_SPIKE_MS", 1000.0)),
             latency_spike_count=int(os.getenv("AUTORCA_LATENCY_SPIKE_COUNT", 2)),
-            resource_exhaustion_percent=float(os.getenv("AUTORCA_RESOURCE_EXHAUSTION_PERCENT", 90.0)),
+            resource_exhaustion_percent=float(
+                os.getenv("AUTORCA_RESOURCE_EXHAUSTION_PERCENT", 90.0)
+            ),
             resource_exhaustion_count=int(os.getenv("AUTORCA_RESOURCE_EXHAUSTION_COUNT", 2)),
             change_correlation_seconds=int(os.getenv("AUTORCA_CHANGE_CORRELATION_SECONDS", 600)),
         )
@@ -123,4 +124,3 @@ class ThresholdConfig:
             "resource_exhaustion_count": self.resource_exhaustion_count,
             "change_correlation_seconds": self.change_correlation_seconds,
         }
-

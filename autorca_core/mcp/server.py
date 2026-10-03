@@ -6,22 +6,59 @@ Provides MCP tools for:
 - Analyzing logs for anomalies
 - Querying service topology
 - Finding root cause candidates
+
+Paths in tool arguments are chosen by the model driving the client. Set
+AUTORCA_MCP_ALLOWED_ROOTS (directories separated by os.pathsep) to confine every
+tool to those directories; without it the server can read any file it has
+permission to read.
 """
 
 import asyncio
 import json
-from datetime import datetime, timezone, timedelta
+import logging
+import os
+from pathlib import Path
 from typing import Optional, Dict, Any
 
-from autorca_core.reasoning.loop import run_rca_from_files, DataSourcesConfig, run_rca
+from autorca_core.reasoning.loop import run_rca_from_files
 from autorca_core.outputs.reports import generate_markdown_report, generate_json_report
 from autorca_core.ingestion import load_logs, load_metrics, load_traces
 from autorca_core.graph_engine.builder import build_service_graph
 from autorca_core.reasoning.rules import apply_rules
 from autorca_core.config import ThresholdConfig
+from autorca_core.model.events import to_utc
 from autorca_core.logging import configure_logging, get_logger
 
 logger = get_logger(__name__)
+
+ALLOWED_ROOTS_ENV = "AUTORCA_MCP_ALLOWED_ROOTS"
+LOG_LEVEL_ENV = "AUTORCA_LOG_LEVEL"
+
+
+def _allowed_roots() -> list[Path]:
+    """Directories the tools may read from, from AUTORCA_MCP_ALLOWED_ROOTS (empty = any)."""
+    value = os.environ.get(ALLOWED_ROOTS_ENV, "")
+    return [Path(p).expanduser().resolve() for p in value.split(os.pathsep) if p.strip()]
+
+
+def _resolve_path(path: str) -> str:
+    """
+    Resolve a path argument and enforce AUTORCA_MCP_ALLOWED_ROOTS.
+
+    Raises:
+        PermissionError: If allowed roots are configured and the resolved path
+            (after following symlinks and "..") is outside all of them.
+    """
+    resolved = Path(path).expanduser().resolve()
+    roots = _allowed_roots()
+    if roots and not any(resolved == root or resolved.is_relative_to(root) for root in roots):
+        raise PermissionError(f"Path is outside {ALLOWED_ROOTS_ENV}: {path}")
+    return str(resolved)
+
+
+def _resolve_optional_path(path: Optional[str]) -> Optional[str]:
+    """_resolve_path() for optional arguments; empty or missing stays None."""
+    return _resolve_path(path) if path else None
 
 
 def create_mcp_server():
@@ -35,9 +72,7 @@ def create_mcp_server():
         from mcp.server import Server
         from mcp.types import Tool, TextContent
     except ImportError:
-        raise ImportError(
-            "mcp package required for MCP server. Install with: pip install mcp"
-        )
+        raise ImportError("mcp package required for MCP server. Install with: pip install mcp")
 
     server = Server("autorca-core")
 
@@ -209,13 +244,20 @@ def create_mcp_server():
 
 async def _handle_run_rca(args: Dict[str, Any]) -> str:
     """Handle run_rca tool call."""
-    logs_path = args["logs_path"]
+    logs_path = _resolve_path(args["logs_path"])
     symptom = args["symptom"]
-    metrics_path = args.get("metrics_path")
-    traces_path = args.get("traces_path")
-    configs_path = args.get("configs_path")
+    metrics_path = _resolve_optional_path(args.get("metrics_path"))
+    traces_path = _resolve_optional_path(args.get("traces_path"))
+    configs_path = _resolve_optional_path(args.get("configs_path"))
     window_minutes = args.get("window_minutes", 60)
     output_format = args.get("format", "markdown")
+
+    if (
+        not isinstance(window_minutes, int)
+        or isinstance(window_minutes, bool)
+        or window_minutes <= 0
+    ):
+        raise ValueError("window_minutes must be a positive integer")
 
     logger.info(f"Running RCA for symptom: {symptom}")
 
@@ -238,14 +280,14 @@ async def _handle_run_rca(args: Dict[str, Any]) -> str:
 
 async def _handle_analyze_logs(args: Dict[str, Any]) -> str:
     """Handle analyze_logs tool call."""
-    logs_path = args["logs_path"]
+    logs_path = _resolve_path(args["logs_path"])
     time_from_str = args.get("time_from")
     time_to_str = args.get("time_to")
     service_filter = args.get("service_filter")
 
     # Parse times
-    time_from = datetime.fromisoformat(time_from_str) if time_from_str else None
-    time_to = datetime.fromisoformat(time_to_str) if time_to_str else None
+    time_from = to_utc(time_from_str) if time_from_str else None
+    time_to = to_utc(time_to_str) if time_to_str else None
 
     logger.info(f"Analyzing logs from: {logs_path}")
 
@@ -281,16 +323,18 @@ async def _handle_analyze_logs(args: Dict[str, Any]) -> str:
     if error_logs:
         summary_parts.append("**Recent Errors:**")
         for log in sorted(error_logs, key=lambda x: x.timestamp, reverse=True)[:10]:
-            summary_parts.append(f"- [{log.timestamp.isoformat()}] {log.service}: {log.message[:100]}")
+            summary_parts.append(
+                f"- [{log.timestamp.isoformat()}] {log.service}: {log.message[:100]}"
+            )
 
     return "\n".join(summary_parts)
 
 
 async def _handle_get_service_graph(args: Dict[str, Any]) -> str:
     """Handle get_service_graph tool call."""
-    logs_path = args["logs_path"]
-    traces_path = args.get("traces_path")
-    metrics_path = args.get("metrics_path")
+    logs_path = _resolve_path(args["logs_path"])
+    traces_path = _resolve_optional_path(args.get("traces_path"))
+    metrics_path = _resolve_optional_path(args.get("metrics_path"))
 
     logger.info("Building service graph")
 
@@ -309,9 +353,9 @@ async def _handle_get_service_graph(args: Dict[str, Any]) -> str:
 
 async def _handle_find_root_causes(args: Dict[str, Any]) -> str:
     """Handle find_root_causes tool call."""
-    logs_path = args["logs_path"]
-    metrics_path = args.get("metrics_path")
-    traces_path = args.get("traces_path")
+    logs_path = _resolve_path(args["logs_path"])
+    metrics_path = _resolve_optional_path(args.get("metrics_path"))
+    traces_path = _resolve_optional_path(args.get("traces_path"))
     sensitivity = args.get("sensitivity", "normal")
 
     logger.info(f"Finding root causes with sensitivity: {sensitivity}")
@@ -358,17 +402,26 @@ async def _handle_find_root_causes(args: Dict[str, Any]) -> str:
 
 def start_mcp_server():
     """Start the MCP server (stdio transport)."""
-    configure_logging(level="INFO")
+    level = os.environ.get(LOG_LEVEL_ENV, "INFO").upper()
+    if not isinstance(logging.getLevelName(level), int):
+        level = "INFO"
+    configure_logging(level=level)
     logger.info("Starting AutoRCA-Core MCP server")
+
+    roots = _allowed_roots()
+    if roots:
+        logger.info(f"Tools restricted to: {', '.join(str(r) for r in roots)}")
+    else:
+        logger.warning(
+            f"{ALLOWED_ROOTS_ENV} is not set; tools can read any file this process can read"
+        )
 
     server = create_mcp_server()
 
     try:
         from mcp.server.stdio import stdio_server
     except ImportError:
-        raise ImportError(
-            "mcp package required. Install with: pip install mcp"
-        )
+        raise ImportError("mcp package required. Install with: pip install mcp")
 
     async def run():
         async with stdio_server() as (read_stream, write_stream):
@@ -379,4 +432,3 @@ def start_mcp_server():
             )
 
     asyncio.run(run())
-

@@ -11,7 +11,7 @@ __author__ = "Nik Kale"
 
 from autorca_core.model.events import Event, LogEvent, MetricPoint, Span
 from autorca_core.model.graph import Service, Dependency, IncidentNode
-from autorca_core.reasoning.loop import run_rca, RCARunResult
+from autorca_core.reasoning.loop import run_rca, RCARunResult, DataSourcesConfig
 from autorca_core.reasoning.llm import AnthropicLLM, DummyLLM
 from autorca_core.logging import configure_logging, get_logger
 from autorca_core.config import ThresholdConfig
@@ -27,6 +27,7 @@ __all__ = [
     "IncidentNode",
     "run_rca",
     "RCARunResult",
+    "DataSourcesConfig",
     "AnthropicLLM",
     "DummyLLM",
     "configure_logging",

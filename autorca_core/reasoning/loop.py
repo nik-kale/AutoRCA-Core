@@ -7,10 +7,9 @@ The main entry point for running root cause analysis.
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from autorca_core.ingestion import load_logs, load_metrics, load_traces, load_configs
-from autorca_core.model.events import LogEvent, MetricPoint, Span, ConfigChange
+from autorca_core.model.events import LogEvent, MetricPoint, Span, ConfigChange, to_utc
 from autorca_core.model.graph import ServiceGraph
 from autorca_core.graph_engine.builder import build_service_graph
 from autorca_core.graph_engine.queries import GraphQueries
@@ -33,6 +32,7 @@ class DataSourcesConfig:
         traces_dir: Path to traces directory or file
         configs_dir: Path to configs directory or file
     """
+
     logs_dir: Optional[str] = None
     metrics_dir: Optional[str] = None
     traces_dir: Optional[str] = None
@@ -52,6 +52,7 @@ class RCARunResult:
         timeline: Chronological list of incidents
         metadata: Additional metadata about the run
     """
+
     primary_symptom: str
     root_cause_candidates: List[RootCauseCandidate]
     service_graph: ServiceGraph
@@ -111,7 +112,8 @@ def run_rca(
         >>> result = run_rca(window, "API 500 errors", sources)
         >>> print(result.summary)
     """
-    time_from, time_to = incident_window
+    # Naive datetimes are treated as UTC so they compare with parsed event timestamps
+    time_from, time_to = (to_utc(t) for t in incident_window)
 
     # Use DummyLLM if no LLM provided
     if llm is None:
@@ -142,25 +144,19 @@ def run_rca(
         logger.info(f"  Loaded {len(configs)} config changes")
 
     # Step 2: Build service graph
-<<<<<<< HEAD
     logger.info("Building service graph...")
-    graph = build_service_graph(logs=logs, metrics=metrics, traces=traces, configs=configs)
-    logger.info(f"  Graph: {len(graph.services)} services, {len(graph.dependencies)} dependencies, {len(graph.incidents)} incidents")
+    graph = build_service_graph(
+        logs=logs, metrics=metrics, traces=traces, configs=configs, thresholds=thresholds
+    )
+    logger.info(
+        f"  Graph: {len(graph.services)} services, {len(graph.dependencies)} dependencies, "
+        f"{len(graph.incidents)} incidents"
+    )
 
     # Step 3: Run rule-based analysis
     logger.info("Applying RCA rules...")
-    candidates = apply_rules(graph)
-    logger.info(f"  Identified {len(candidates)} root cause candidates")
-=======
-    print("Building service graph...")
-    graph = build_service_graph(logs=logs, metrics=metrics, traces=traces, configs=configs, thresholds=thresholds)
-    print(f"  Graph: {len(graph.services)} services, {len(graph.dependencies)} dependencies, {len(graph.incidents)} incidents")
-
-    # Step 3: Run rule-based analysis
-    print("Applying RCA rules...")
     candidates = apply_rules(graph, thresholds=thresholds)
-    print(f"  Identified {len(candidates)} root cause candidates")
->>>>>>> b2361b9 (feat: add configurable detection thresholds for anomaly detection)
+    logger.info(f"  Identified {len(candidates)} root cause candidates")
 
     # Step 4: Generate summary using LLM
     logger.info("Generating RCA summary...")

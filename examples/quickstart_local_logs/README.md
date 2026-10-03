@@ -35,9 +35,16 @@ autorca run \
 ## Expected Output
 
 AutoRCA-Core should identify:
-- **Root Cause:** PostgreSQL connection pool exhaustion (high confidence)
-- **Evidence:** Max connections reached, connection pool errors
-- **Remediation:** Increase DB connection pool size, check for connection leaks
+- **Root Cause:** resource exhaustion in `postgres` (85% confidence), from the
+  `cpu_percent` samples above 90%
+- **Other candidates:** error spikes in `user-service` and `api-gateway`
+- **Remediation:** scale `postgres` resources and check for connection leaks or
+  inefficient queries
 
-The causal chain should show:
-`postgres → user-service → api-gateway → frontend`
+This directory has no trace data, so the service graph has no dependency edges
+and no causal chain is reported. With spans linking the services, AutoRCA-Core
+infers dependencies and reports a propagation chain such as
+`postgres → user-service → api-gateway → frontend`.
+
+Only CPU and memory metrics are checked for resource exhaustion today, so the
+`connections_active` series is loaded but not flagged on its own.

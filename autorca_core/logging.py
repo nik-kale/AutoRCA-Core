@@ -4,9 +4,28 @@ Logging configuration for AutoRCA-Core.
 Provides structured logging with configurable log levels and formats.
 """
 
+import json
 import logging
 import sys
 from typing import Optional
+
+ROOT_LOGGER_NAME = "autorca_core"
+
+
+class _JsonFormatter(logging.Formatter):
+    """One JSON object per line, with the message properly escaped."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": self.formatTime(record),
+            "level": record.levelname,
+            "module": record.module,
+            "function": record.funcName,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload)
 
 
 def configure_logging(
@@ -36,12 +55,9 @@ def configure_logging(
     # Remove any existing handlers
     logger.handlers.clear()
 
+    formatter: logging.Formatter
     if structured:
-        formatter = logging.Formatter(
-            '{"timestamp": "%(asctime)s", "level": "%(levelname)s", '
-            '"module": "%(module)s", "function": "%(funcName)s", '
-            '"message": "%(message)s"}'
-        )
+        formatter = _JsonFormatter()
     else:
         formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -63,17 +79,22 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
     Get a logger instance.
 
     Args:
-        name: Optional logger name (defaults to "autorca_core")
+        name: Optional logger name, usually __name__ (defaults to "autorca_core").
+            Names outside the package are nested under "autorca_core.".
 
     Returns:
         Logger instance
     """
-    logger_name = f"autorca_core.{name}" if name else "autorca_core"
-    logger = logging.getLogger(logger_name)
+    if not name or name == ROOT_LOGGER_NAME or name.startswith(ROOT_LOGGER_NAME + "."):
+        logger_name = name or ROOT_LOGGER_NAME
+    else:
+        logger_name = f"{ROOT_LOGGER_NAME}.{name}"
 
-    # If logger has no handlers, configure it with default settings
-    if not logger.handlers:
+    # Child loggers propagate to the package logger, which owns the handler.
+    # Only install the default configuration if nothing has configured it yet;
+    # checking the child (which never has handlers) reset any level the caller
+    # had set on every call.
+    if not logging.getLogger(ROOT_LOGGER_NAME).handlers:
         configure_logging()
 
-    return logger
-
+    return logging.getLogger(logger_name)

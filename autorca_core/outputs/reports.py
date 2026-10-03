@@ -3,6 +3,7 @@ Report generation: Create RCA reports in markdown, JSON, and other formats.
 """
 
 import json
+from html import escape
 from typing import Dict, Any, List
 from datetime import datetime
 
@@ -31,7 +32,9 @@ def generate_markdown_report(result: RCARunResult) -> str:
     lines.append("")
     lines.append(f"**Incident:** {result.primary_symptom}")
     lines.append(f"**Analysis Time:** {datetime.now().isoformat()}")
-    lines.append(f"**Time Window:** {result.metadata.get('window_start', 'N/A')} to {result.metadata.get('window_end', 'N/A')}")
+    lines.append(
+        f"**Time Window:** {result.metadata.get('window_start', 'N/A')} to {result.metadata.get('window_end', 'N/A')}"
+    )
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -85,13 +88,15 @@ def generate_markdown_report(result: RCARunResult) -> str:
         lines.append("|------|---------|------|-------------|----------|")
 
         for incident in result.timeline:
-            timestamp = incident['timestamp'][:19]  # Truncate to seconds
-            service = incident['service']
-            incident_type = incident['type']
-            description = incident['description'][:50]  # Truncate long descriptions
+            timestamp = incident["timestamp"][:19]  # Truncate to seconds
+            service = incident["service"]
+            incident_type = incident["type"]
+            description = incident["description"][:50]  # Truncate long descriptions
             severity = f"{incident['severity']:.2f}"
 
-            lines.append(f"| {timestamp} | {service} | {incident_type} | {description} | {severity} |")
+            lines.append(
+                f"| {timestamp} | {service} | {incident_type} | {description} | {severity} |"
+            )
 
     lines.append("")
     lines.append("---")
@@ -110,8 +115,12 @@ def generate_markdown_report(result: RCARunResult) -> str:
         services_with_incidents = sorted(set(i.service for i in result.service_graph.incidents))
         lines.append("**Services with Incidents:**")
         for service in services_with_incidents:
-            incident_count = len([i for i in result.service_graph.incidents if i.service == service])
-            lines.append(f"- {service} ({incident_count} incident{'s' if incident_count > 1 else ''})")
+            incident_count = len(
+                [i for i in result.service_graph.incidents if i.service == service]
+            )
+            lines.append(
+                f"- {service} ({incident_count} incident{'s' if incident_count > 1 else ''})"
+            )
         lines.append("")
 
     lines.append("---")
@@ -149,7 +158,7 @@ def generate_json_report(result: RCARunResult, indent: int = 2) -> str:
     report = result.to_dict()
 
     # Add timestamp
-    report['generated_at'] = datetime.now().isoformat()
+    report["generated_at"] = datetime.now().isoformat()
 
     return json.dumps(report, indent=indent, default=str)
 
@@ -180,12 +189,22 @@ def generate_html_report(result: RCARunResult) -> str:
     # Generate candidates HTML
     candidates_html = _generate_candidates_html(result.root_cause_candidates)
 
+    # Everything below can contain text from the analysed data (log messages end up
+    # in evidence and summaries), so it is escaped before it is placed in the page.
+    symptom = escape(result.primary_symptom)
+    summary = escape(result.summary)
+    window_start = escape(str(result.metadata.get("window_start", "N/A")))
+    window_end = escape(str(result.metadata.get("window_end", "N/A")))
+    num_services = escape(str(result.metadata.get("num_services", 0)))
+    num_incidents = escape(str(result.metadata.get("num_incidents", 0)))
+    num_logs = escape(str(result.metadata.get("num_logs", 0)))
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RCA Report - {result.primary_symptom}</title>
+    <title>RCA Report - {symptom}</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
@@ -365,9 +384,9 @@ def generate_html_report(result: RCARunResult) -> str:
     <div class="header">
         <h1>🔍 Root Cause Analysis Report</h1>
         <div class="meta">
-            <strong>Incident:</strong> {result.primary_symptom}<br>
+            <strong>Incident:</strong> {symptom}<br>
             <strong>Analysis Time:</strong> {datetime.now().isoformat()}<br>
-            <strong>Window:</strong> {result.metadata.get('window_start', 'N/A')} to {result.metadata.get('window_end', 'N/A')}
+            <strong>Window:</strong> {window_start} to {window_end}
         </div>
     </div>
 
@@ -375,11 +394,11 @@ def generate_html_report(result: RCARunResult) -> str:
         <h2>📊 Overview</h2>
         <div class="stats">
             <div class="stat-card">
-                <div class="value">{result.metadata.get('num_services', 0)}</div>
+                <div class="value">{num_services}</div>
                 <div class="label">Services</div>
             </div>
             <div class="stat-card">
-                <div class="value">{result.metadata.get('num_incidents', 0)}</div>
+                <div class="value">{num_incidents}</div>
                 <div class="label">Incidents</div>
             </div>
             <div class="stat-card">
@@ -387,7 +406,7 @@ def generate_html_report(result: RCARunResult) -> str:
                 <div class="label">Candidates</div>
             </div>
             <div class="stat-card">
-                <div class="value">{result.metadata.get('num_logs', 0)}</div>
+                <div class="value">{num_logs}</div>
                 <div class="label">Log Events</div>
             </div>
         </div>
@@ -395,7 +414,7 @@ def generate_html_report(result: RCARunResult) -> str:
 
     <div class="section">
         <h2>📝 Executive Summary</h2>
-        <div class="summary">{result.summary}</div>
+        <div class="summary">{summary}</div>
     </div>
 
     <div class="section">
@@ -455,22 +474,28 @@ def _generate_service_graph_svg(graph: ServiceGraph, candidates: List[RootCauseC
 
     # Calculate positions (simple circular layout)
     import math
+
     radius = max(200, num_services * 30)
+    # Size the canvas to the layout so nodes on larger graphs are not clipped
+    # (node radius 40 plus the incident badge needs ~60px around the circle).
+    size = int(2 * (radius + 60))
+    center = size / 2
     positions = {}
     for i, service in enumerate(services):
         angle = 2 * math.pi * i / num_services
-        x = 400 + radius * math.cos(angle)
-        y = 300 + radius * math.sin(angle)
+        x = center + radius * math.cos(angle)
+        y = center + radius * math.sin(angle)
         positions[service] = (x, y)
 
     # Build SVG
     svg_parts = [
-        f'<svg width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">',
-        '<defs>',
+        f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" '
+        'xmlns="http://www.w3.org/2000/svg">',
+        "<defs>",
         '<marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">',
         '<polygon points="0 0, 10 3.5, 0 7" fill="#999" />',
-        '</marker>',
-        '</defs>',
+        "</marker>",
+        "</defs>",
     ]
 
     # Draw edges (dependencies)
@@ -499,22 +524,21 @@ def _generate_service_graph_svg(graph: ServiceGraph, candidates: List[RootCauseC
         label = service[:10] + "..." if len(service) > 10 else service
         svg_parts.append(
             f'<text x="{x}" y="{y}" text-anchor="middle" dominant-baseline="middle" '
-            f'fill="white" font-size="12" font-weight="bold">{label}</text>'
+            f'fill="white" font-size="12" font-weight="bold">'
+            f"<title>{escape(service)}</title>{escape(label)}</text>"
         )
 
         # Incident marker
         incidents = graph.get_incidents_for_service(service)
         if incidents:
-            svg_parts.append(
-                f'<circle cx="{x + 30}" cy="{y - 30}" r="8" fill="#e74c3c"/>'
-            )
+            svg_parts.append(f'<circle cx="{x + 30}" cy="{y - 30}" r="8" fill="#e74c3c"/>')
             svg_parts.append(
                 f'<text x="{x + 30}" y="{y - 30}" text-anchor="middle" dominant-baseline="middle" '
                 f'fill="white" font-size="10" font-weight="bold">{len(incidents)}</text>'
             )
 
-    svg_parts.append('</svg>')
-    return '\n'.join(svg_parts)
+    svg_parts.append("</svg>")
+    return "\n".join(svg_parts)
 
 
 def _generate_timeline_html(timeline: List[Dict[str, Any]]) -> str:
@@ -524,22 +548,22 @@ def _generate_timeline_html(timeline: List[Dict[str, Any]]) -> str:
 
     html_parts = []
     for incident in timeline[:20]:  # Limit to 20
-        timestamp = incident['timestamp'][:19]
-        service = incident['service']
-        inc_type = incident['type']
-        description = incident['description']
-        severity = incident['severity']
+        timestamp = escape(str(incident["timestamp"])[:19])
+        service = escape(str(incident["service"]))
+        inc_type = escape(str(incident["type"]))
+        description = escape(str(incident["description"]))
+        severity = incident["severity"]
 
         html_parts.append(
             f'<div class="timeline-item">'
             f'<span class="time">{timestamp}</span> | '
             f'<span class="service">{service}</span> | '
-            f'{inc_type}: {description} '
-            f'(severity: {severity:.2f})'
-            f'</div>'
+            f"{inc_type}: {description} "
+            f"(severity: {severity:.2f})"
+            f"</div>"
         )
 
-    return '\n'.join(html_parts)
+    return "\n".join(html_parts)
 
 
 def _generate_candidates_html(candidates: List[RootCauseCandidate]) -> str:
@@ -549,20 +573,20 @@ def _generate_candidates_html(candidates: List[RootCauseCandidate]) -> str:
 
     html_parts = []
     for i, candidate in enumerate(candidates[:5], 1):
-        evidence_items = '\n'.join(
-            f'<li>{ev}</li>' for ev in candidate.evidence[:10]
+        evidence_items = "\n".join(f"<li>{escape(str(ev))}</li>" for ev in candidate.evidence[:10])
+        remediation_items = "\n".join(
+            f"<li>{escape(str(step))}</li>" for step in candidate.remediation
         )
-        remediation_items = '\n'.join(
-            f'<li>{step}</li>' for step in candidate.remediation
-        )
+        service = escape(candidate.service)
+        explanation = escape(candidate.explanation)
 
-        html_parts.append(f'''
+        html_parts.append(f"""
 <div class="candidate">
     <div class="header-row">
-        <h3>#{i}: {candidate.service}</h3>
+        <h3>#{i}: {service}</h3>
         <span class="confidence">{candidate.confidence:.0%} Confidence</span>
     </div>
-    <p class="explanation">{candidate.explanation}</p>
+    <p class="explanation">{explanation}</p>
 
     <button class="collapsible">View Evidence ({len(candidate.evidence)} items)</button>
     <div class="content">
@@ -574,9 +598,9 @@ def _generate_candidates_html(candidates: List[RootCauseCandidate]) -> str:
         <ol class="remediation">{remediation_items}</ol>
     </div>
 </div>
-''')
+""")
 
-    return '\n'.join(html_parts)
+    return "\n".join(html_parts)
 
 
 def save_report(result: RCARunResult, output_path: str, format: str = "markdown") -> None:
@@ -597,7 +621,7 @@ def save_report(result: RCARunResult, output_path: str, format: str = "markdown"
     else:
         raise ValueError(f"Unsupported format: {format}. Use 'markdown', 'json', or 'html'.")
 
-    with open(output_path, 'w', encoding='utf-8') as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)
 
     logger.info(f"Report saved to: {output_path}")
