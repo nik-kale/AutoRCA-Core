@@ -210,35 +210,44 @@ def run_quickstart():
         sys.exit(1)
 
 
+def _status(message: str = "") -> None:
+    """Print progress text to stderr so stdout carries only the report."""
+    print(message, file=sys.stderr)
+
+
 def run_custom_rca(args):
     """Run RCA on custom data."""
-    print("=" * 80)
-    print("AutoRCA-Core: Running RCA")
-    print("=" * 80)
-    print()
+    _status("=" * 80)
+    _status("AutoRCA-Core: Running RCA")
+    _status("=" * 80)
+    _status()
 
     # Validate inputs
     logs_path = Path(args.logs)
     if not logs_path.exists():
-        print(f"Error: Logs path not found: {logs_path}")
+        _status(f"Error: Logs path not found: {logs_path}")
         sys.exit(1)
 
     # Parse time window if provided
     time_from = None
     time_to = None
 
+    if bool(args.time_from) != bool(args.time_to):
+        _status("Error: --from and --to must be given together")
+        sys.exit(1)
+
     if args.time_from and args.time_to:
         try:
             time_from = to_utc(args.time_from)
             time_to = to_utc(args.time_to)
-            print(f"Time window: {time_from} to {time_to}")
+            _status(f"Time window: {time_from} to {time_to}")
         except ValueError as e:
-            print(f"Error parsing time window: {e}")
+            _status(f"Error parsing time window: {e}")
             sys.exit(1)
     else:
-        print("No time window specified - will analyze all data")
+        _status("No time window specified - will analyze all data")
 
-    print()
+    _status()
 
     try:
         # Run RCA
@@ -273,13 +282,13 @@ def run_custom_rca(args):
                 from autorca_core.outputs.reports import generate_html_report
                 print(generate_html_report(result))
 
-        print()
-        print("=" * 80)
-        print("RCA completed successfully!")
-        print("=" * 80)
+        _status()
+        _status("=" * 80)
+        _status("RCA completed successfully!")
+        _status("=" * 80)
 
     except Exception as e:
-        print(f"Error running RCA: {e}")
+        _status(f"Error running RCA: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
