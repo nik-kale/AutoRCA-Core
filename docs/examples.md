@@ -1,22 +1,26 @@
-# ADAPT-RCA Examples
+# AutoRCA-Core Examples
 
 ## Basic Usage
 
-### Example 1: Analyzing Sample Logs
+### Example 1: Analyzing the Quickstart Data
 
 ```bash
-python -m adapt_rca.cli \
-  --input examples/basic_logs/sample_logs.jsonl \
+autorca run \
+  --logs examples/quickstart_local_logs/logs.jsonl \
+  --metrics examples/quickstart_local_logs/metrics.jsonl \
+  --symptom "Checkout API returning 500 errors" \
+  --format json \
   --output results.json
 ```
 
-This will analyze the sample logs and output:
-- Human-readable incident summary to console
-- Machine-readable JSON to `results.json`
+This writes the machine-readable RCA report to `results.json`; progress messages
+go to stderr. Omit `--output` to print the report to stdout, and use
+`--format markdown` (the default) or `--format html` for the other formats.
 
 ### Example 2: Custom Log Analysis
 
-Create your own log file in JSONL format:
+Create your own log file in JSONL format (see `examples/basic_logs/sample_logs.jsonl`
+for a minimal sample):
 
 ```json
 {"timestamp": "2025-11-16T14:00:00Z", "service": "auth-service", "level": "ERROR", "message": "Failed login attempt from IP 192.168.1.100"}
@@ -27,8 +31,13 @@ Create your own log file in JSONL format:
 Then run:
 
 ```bash
-python -m adapt_rca.cli --input my_logs.jsonl
+autorca run --logs my_logs.jsonl --symptom "Repeated failed logins"
 ```
+
+By default an error spike needs 3 errors from one service within 5 minutes. From
+Python, pass a `ThresholdConfig` (for example `ThresholdConfig.strict()` or
+`ThresholdConfig.from_env()`) to `run_rca(..., thresholds=...)` to tune detection;
+see [architecture.md](architecture.md).
 
 ## Use Cases
 

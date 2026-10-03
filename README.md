@@ -91,7 +91,7 @@ AutoRCA-Core follows a **layered architecture** for clarity and extensibility:
 
 ### Prerequisites
 - Python 3.10+
-- (Optional) OpenAI or Anthropic API key for LLM-enhanced summaries
+- (Optional) Anthropic API key for LLM-enhanced summaries
 
 ### Installation
 
@@ -117,10 +117,13 @@ pip install -e ".[llm]"
 autorca quickstart
 ```
 
-This runs RCA on synthetic data simulating a **database connection pool exhaustion incident**. You'll see:
-- Root cause identified: PostgreSQL connection saturation
-- Causal chain: `postgres → user-service → api-gateway → frontend`
-- Remediation: Scale connection pool, check for leaks
+This runs RCA on synthetic logs and metrics simulating a **database connection pool exhaustion incident**. You'll see:
+- Top root cause: resource exhaustion in `postgres`
+- Error and latency spikes in `user-service` and `api-gateway`, ranked below it
+- Remediation steps for each candidate, and an incident timeline
+
+The quickstart data has no traces, so no dependency edges or causal chains are
+inferred; run `autorca run ... --traces <spans>` on data with spans to get them.
 
 ### Run on Your Own Data
 
@@ -132,11 +135,24 @@ autorca run \
   --output report.md
 ```
 
+Use `--format json` or `--format html` for other report formats; without
+`--output` the report is written to stdout and progress messages to stderr.
+`--from`/`--to` restrict the analysis to a time window (ISO 8601; timestamps
+without an offset are treated as UTC).
+
 **Supported formats:**
 - Logs: JSON Lines, plain text (auto-parsed)
-- Metrics: CSV, JSON Lines
-- Traces: OpenTelemetry JSON, Jaeger JSON
-- Configs: JSON, YAML (deployment/config change events)
+- Metrics: CSV, JSON Lines, JSON arrays
+- Traces: JSON / JSON Lines records with one span per object, using
+  snake_case or camelCase field names (`trace_id`/`traceId`,
+  `span_id`/`spanId`, `parent_span_id`/`parentSpanId`, `start_time`/`startTime`).
+  OTLP `resourceSpans` exports and Jaeger UI `{"data": [...]}` exports must be
+  flattened first.
+- Configs: JSON, JSON Lines, YAML (deployment/config change events)
+
+Directory sources are read recursively. Ingestion enforces `IngestionLimits`
+(file size, files per directory, total events); pass `limits=` to the `load_*`
+functions to change them.
 
 ---
 
@@ -146,7 +162,7 @@ autorca run \
 from datetime import datetime
 from autorca_core import run_rca, DataSourcesConfig, AnthropicLLM
 
-# Define the incident time window
+# Define the incident time window (naive datetimes are treated as UTC)
 window = (
     datetime(2025, 11, 10, 10, 0, 0),
     datetime(2025, 11, 10, 10, 5, 0),
@@ -178,11 +194,10 @@ print(result.summary)
 import os
 from autorca_core import run_rca, DataSourcesConfig, AnthropicLLM
 
-# Initialize Anthropic LLM (requires ANTHROPIC_API_KEY env var)
+# Initialize Anthropic LLM (requires `pip install -e ".[llm]"` and ANTHROPIC_API_KEY)
 llm = AnthropicLLM(
     api_key=os.getenv("ANTHROPIC_API_KEY"),
-    model="claude-3-5-sonnet-20241022",
-    max_tokens=2048,
+    model="claude-sonnet-5-5",  # the default
 )
 
 # Run RCA with LLM enhancement
@@ -195,6 +210,7 @@ result = run_rca(
 
 # Get comprehensive AI-generated analysis
 print(result.summary)  # Structured RCA with executive summary, impact assessment, and remediation
+# If the API call fails, summary falls back to the rule-based (DummyLLM) summary.
 
 # Check token usage and costs
 stats = llm.get_usage_stats()
@@ -236,6 +252,7 @@ AutoRCA-Core/
 │   ├── graph_engine/          # Graph construction and querying
 │   ├── reasoning/             # RCA logic (rules, LLM, loop)
 │   ├── outputs/               # Report generation (markdown, JSON, HTML)
+│   ├── mcp/                   # MCP server (see docs/MCP_INTEGRATION.md)
 │   └── cli/                   # CLI interface
 ├── examples/                  # Example data and scenarios
 │   └── quickstart_local_logs/ # Quickstart synthetic data
@@ -294,10 +311,11 @@ class MyCustomLLM:
 - [x] Multi-signal ingestion (logs, metrics, traces, configs)
 - [x] Rule-based reasoning with causal chains
 - [x] CLI and Python API
-- [ ] OpenAI and Anthropic LLM integrations
-- [ ] MCP server for tool exposure
+- [x] Anthropic LLM integration
+- [ ] OpenAI LLM integration (`OpenAILLM` is a stub)
+- [x] MCP server for tool exposure
 - [ ] Prometheus and OpenTelemetry native connectors
-- [ ] Interactive HTML reports with graph visualizations
+- [x] Interactive HTML reports with graph visualizations
 - [ ] Kubernetes and service mesh topology providers
 - [ ] Pre-built RCA templates for common incident types (DB saturation, DNS, auth)
 
@@ -325,6 +343,9 @@ For production use:
 - **Validate data sources**: Ensure logs/metrics are from trusted sources
 - **Sanitize sensitive data**: Remove PII, secrets, and credentials before analysis
 - **Use Secure-MCP-Gateway**: When exposing AutoRCA-Core as a tool, use policy controls and human approvals
+- **Restrict MCP file access**: Set `AUTORCA_MCP_ALLOWED_ROOTS` so the MCP tools can only read the directories you list (see [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md))
+
+Text taken from the analysed data (log messages, service names) is HTML-escaped in HTML reports.
 
 ---
 
