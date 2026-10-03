@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime
 
-from autorca_core.model.events import ConfigChange, to_utc
+from autorca_core.model.events import ChangeType, ConfigChange, to_utc
 from autorca_core.ingestion._jsonio import read_json_records
 from autorca_core.ingestion._sources import load_source
 from autorca_core.logging import get_logger
@@ -126,6 +126,7 @@ def _parse_config_item(item: Dict[str, Any]) -> Optional[ConfigChange]:
 
         # Determine change type
         change_type_val = str(item.get('change_type') or item.get('type') or 'config').lower()
+        change_type: ChangeType
         if change_type_val in ('deploy', 'deployment', 'release'):
             change_type = 'deployment'
         elif change_type_val in ('scale', 'scaling', 'autoscale'):

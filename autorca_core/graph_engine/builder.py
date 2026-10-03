@@ -5,7 +5,6 @@ Builds a ServiceGraph from logs, metrics, traces, and config changes.
 """
 
 from typing import List, Dict, Set, Tuple, Optional
-from datetime import datetime, timedelta
 from collections import defaultdict
 
 from autorca_core.model.events import LogEvent, MetricPoint, Span, ConfigChange
@@ -259,10 +258,10 @@ def _densest_window(items: list, window_seconds: float) -> list:
 
 
 def build_service_graph(
-    logs: List[LogEvent] = None,
-    metrics: List[MetricPoint] = None,
-    traces: List[Span] = None,
-    configs: List[ConfigChange] = None,
+    logs: Optional[List[LogEvent]] = None,
+    metrics: Optional[List[MetricPoint]] = None,
+    traces: Optional[List[Span]] = None,
+    configs: Optional[List[ConfigChange]] = None,
     thresholds: Optional[ThresholdConfig] = None,
 ) -> ServiceGraph:
     """

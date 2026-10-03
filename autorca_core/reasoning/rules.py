@@ -4,12 +4,11 @@ Rule-based RCA heuristics.
 Simple, deterministic rules for identifying root causes without requiring an LLM.
 """
 
-from typing import List, Dict, Set, Optional
+from typing import List, Dict, Optional
 from dataclasses import dataclass
-from datetime import timedelta
 
-from autorca_core.model.graph import ServiceGraph, IncidentNode, IncidentType
-from autorca_core.graph_engine.queries import GraphQueries, CausalChain
+from autorca_core.model.graph import ServiceGraph, IncidentType
+from autorca_core.graph_engine.queries import GraphQueries
 from autorca_core.config import ThresholdConfig
 
 
@@ -162,7 +161,7 @@ def _rule_recent_changes(graph: ServiceGraph, queries: GraphQueries, thresholds:
                     evidence=evidence,
                     remediation=[
                         f"Review recent {change.incident_type.value} in {service}",
-                        f"Consider rolling back to previous version",
+                        "Consider rolling back to previous version",
                         "Check deployment logs and config diffs",
                     ],
                 ))

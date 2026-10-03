@@ -6,7 +6,7 @@ dependencies, and incident symptoms.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Set, Optional, Any
+from typing import Dict, List, Set, Any
 from datetime import datetime
 from enum import Enum
 

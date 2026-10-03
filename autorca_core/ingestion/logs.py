@@ -7,7 +7,7 @@ Supports JSON Lines, plain text, and structured log formats.
 import json
 import re
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from datetime import datetime, timezone
 
 from autorca_core.model.events import LogEvent, Severity, to_utc

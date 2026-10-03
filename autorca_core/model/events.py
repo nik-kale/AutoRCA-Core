@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 
-def to_utc(value: Union[datetime, str]) -> datetime:
+def to_utc(value: Union[datetime, date, str]) -> datetime:
     """
     Normalize a timestamp to a timezone-aware UTC datetime.
 
@@ -19,8 +19,8 @@ def to_utc(value: Union[datetime, str]) -> datetime:
     and aware datetimes. Normalizing at the model boundary keeps that safe.
 
     Args:
-        value: A datetime, or an ISO 8601 string. A trailing "Z" is accepted on
-            every supported Python version.
+        value: A datetime, a date (midnight), or an ISO 8601 string. A trailing
+            "Z" is accepted on every supported Python version.
 
     Returns:
         The same instant as an aware datetime in UTC. Naive inputs are assumed
@@ -162,6 +162,9 @@ class Span:
         return self.error or (self.status_code is not None and self.status_code >= 400)
 
 
+ChangeType = Literal["config", "deployment", "scaling", "other"]
+
+
 @dataclass
 class ConfigChange:
     """
@@ -171,7 +174,7 @@ class ConfigChange:
     """
     timestamp: datetime
     service: str
-    change_type: Literal["config", "deployment", "scaling", "other"] = "config"
+    change_type: ChangeType = "config"
     description: str = ""
     version_before: Optional[str] = None
     version_after: Optional[str] = None

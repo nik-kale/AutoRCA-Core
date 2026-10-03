@@ -8,7 +8,6 @@ natural language explanations and insights.
 import os
 import time
 from typing import List, Dict, Any, Optional, Protocol
-from dataclasses import dataclass
 
 from autorca_core.model.graph import ServiceGraph
 from autorca_core.reasoning.rules import RootCauseCandidate
@@ -320,16 +319,16 @@ Return the steps as a numbered list."""
     ) -> str:
         """Build the user prompt for RCA summarization."""
         prompt_parts = [
-            f"# Root Cause Analysis Request",
-            f"",
+            "# Root Cause Analysis Request",
+            "",
             f"**Primary Symptom:** {primary_symptom}",
-            f"",
-            f"## Service Topology",
-            f"",
+            "",
+            "## Service Topology",
+            "",
             f"**Services:** {len(graph.services)}",
             f"**Dependencies:** {len(graph.dependencies)}",
             f"**Incidents Detected:** {len(graph.incidents)}",
-            f"",
+            "",
         ]
 
         # Add service graph structure

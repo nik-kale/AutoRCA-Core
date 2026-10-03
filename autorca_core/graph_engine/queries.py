@@ -7,7 +7,7 @@ Provides utilities to find causal chains, hotspots, and correlation patterns.
 from typing import List, Set, Dict, Tuple
 from dataclasses import dataclass
 
-from autorca_core.model.graph import ServiceGraph, IncidentNode, Dependency
+from autorca_core.model.graph import ServiceGraph, IncidentNode
 
 
 @dataclass

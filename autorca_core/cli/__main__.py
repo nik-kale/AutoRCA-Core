@@ -9,7 +9,6 @@ Usage:
 import sys
 import argparse
 from pathlib import Path
-from datetime import datetime, timedelta
 
 from autorca_core.reasoning.loop import run_rca, run_rca_from_files, DataSourcesConfig
 from autorca_core.outputs.reports import generate_markdown_report, save_report
@@ -45,7 +44,7 @@ def main():
     )
     
     # MCP server command
-    mcp_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "mcp-server",
         help="Start MCP server for Claude Desktop integration",
     )

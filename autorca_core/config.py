@@ -5,8 +5,7 @@ Provides configurable thresholds and settings for anomaly detection and RCA anal
 """
 
 import os
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass

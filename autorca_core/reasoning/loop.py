@@ -7,7 +7,6 @@ The main entry point for running root cause analysis.
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from autorca_core.ingestion import load_logs, load_metrics, load_traces, load_configs
 from autorca_core.model.events import LogEvent, MetricPoint, Span, ConfigChange, to_utc

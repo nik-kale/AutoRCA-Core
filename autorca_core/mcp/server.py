@@ -18,10 +18,9 @@ import json
 import logging
 import os
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 
-from autorca_core.reasoning.loop import run_rca_from_files, DataSourcesConfig, run_rca
+from autorca_core.reasoning.loop import run_rca_from_files
 from autorca_core.outputs.reports import generate_markdown_report, generate_json_report
 from autorca_core.ingestion import load_logs, load_metrics, load_traces
 from autorca_core.graph_engine.builder import build_service_graph
@@ -42,7 +41,7 @@ def _allowed_roots() -> list[Path]:
     return [Path(p).expanduser().resolve() for p in value.split(os.pathsep) if p.strip()]
 
 
-def _resolve_path(path: Optional[str]) -> Optional[str]:
+def _resolve_path(path: str) -> str:
     """
     Resolve a path argument and enforce AUTORCA_MCP_ALLOWED_ROOTS.
 
@@ -50,13 +49,16 @@ def _resolve_path(path: Optional[str]) -> Optional[str]:
         PermissionError: If allowed roots are configured and the resolved path
             (after following symlinks and "..") is outside all of them.
     """
-    if not path:
-        return None
     resolved = Path(path).expanduser().resolve()
     roots = _allowed_roots()
     if roots and not any(resolved == root or resolved.is_relative_to(root) for root in roots):
         raise PermissionError(f"Path is outside {ALLOWED_ROOTS_ENV}: {path}")
     return str(resolved)
+
+
+def _resolve_optional_path(path: Optional[str]) -> Optional[str]:
+    """_resolve_path() for optional arguments; empty or missing stays None."""
+    return _resolve_path(path) if path else None
 
 
 def create_mcp_server():
@@ -246,9 +248,9 @@ async def _handle_run_rca(args: Dict[str, Any]) -> str:
     """Handle run_rca tool call."""
     logs_path = _resolve_path(args["logs_path"])
     symptom = args["symptom"]
-    metrics_path = _resolve_path(args.get("metrics_path"))
-    traces_path = _resolve_path(args.get("traces_path"))
-    configs_path = _resolve_path(args.get("configs_path"))
+    metrics_path = _resolve_optional_path(args.get("metrics_path"))
+    traces_path = _resolve_optional_path(args.get("traces_path"))
+    configs_path = _resolve_optional_path(args.get("configs_path"))
     window_minutes = args.get("window_minutes", 60)
     output_format = args.get("format", "markdown")
 
@@ -327,8 +329,8 @@ async def _handle_analyze_logs(args: Dict[str, Any]) -> str:
 async def _handle_get_service_graph(args: Dict[str, Any]) -> str:
     """Handle get_service_graph tool call."""
     logs_path = _resolve_path(args["logs_path"])
-    traces_path = _resolve_path(args.get("traces_path"))
-    metrics_path = _resolve_path(args.get("metrics_path"))
+    traces_path = _resolve_optional_path(args.get("traces_path"))
+    metrics_path = _resolve_optional_path(args.get("metrics_path"))
 
     logger.info("Building service graph")
 
@@ -348,8 +350,8 @@ async def _handle_get_service_graph(args: Dict[str, Any]) -> str:
 async def _handle_find_root_causes(args: Dict[str, Any]) -> str:
     """Handle find_root_causes tool call."""
     logs_path = _resolve_path(args["logs_path"])
-    metrics_path = _resolve_path(args.get("metrics_path"))
-    traces_path = _resolve_path(args.get("traces_path"))
+    metrics_path = _resolve_optional_path(args.get("metrics_path"))
+    traces_path = _resolve_optional_path(args.get("traces_path"))
     sensitivity = args.get("sensitivity", "normal")
 
     logger.info(f"Finding root causes with sensitivity: {sensitivity}")
