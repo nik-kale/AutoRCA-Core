@@ -11,7 +11,9 @@ from datetime import date, datetime
 
 from autorca_core.model.events import ConfigChange, to_utc
 from autorca_core.ingestion._jsonio import read_json_records
+from autorca_core.ingestion._sources import load_source
 from autorca_core.logging import get_logger
+from autorca_core.validation import IngestionLimits
 
 logger = get_logger(__name__)
 
@@ -21,6 +23,7 @@ def load_configs(
     time_from: Optional[datetime] = None,
     time_to: Optional[datetime] = None,
     service_filter: Optional[str] = None,
+    limits: Optional[IngestionLimits] = None,
 ) -> List[ConfigChange]:
     """
     Load config/deployment change events from a file or directory.
@@ -30,6 +33,7 @@ def load_configs(
         time_from: Start of time window (inclusive)
         time_to: End of time window (inclusive)
         service_filter: Only include changes for this service
+        limits: Optional ingestion limits (defaults to IngestionLimits())
 
     Returns:
         List of ConfigChange objects
@@ -39,16 +43,14 @@ def load_configs(
     if not source_path.exists():
         raise FileNotFoundError(f"Config source not found: {source}")
 
-    changes = []
-
-    if source_path.is_file():
-        changes.extend(_load_config_file(source_path))
-    else:
-        # Load all .jsonl, .json, .yaml, .yml files in directory.
-        # (pathlib globs do not support brace expansion, so one pattern each.)
-        for ext in ('*.jsonl', '*.json', '*.yaml', '*.yml'):
-            for file_path in source_path.glob(f"**/{ext}"):
-                changes.extend(_load_config_file(file_path))
+    # A directory loads all .jsonl, .json, .yaml and .yml files below it.
+    # (pathlib globs do not support brace expansion, so one pattern each.)
+    changes = load_source(
+        source_path,
+        ['*.jsonl', '*.json', '*.yaml', '*.yml'],
+        _load_config_file,
+        limits or IngestionLimits(),
+    )
 
     # Apply filters
     if time_from:

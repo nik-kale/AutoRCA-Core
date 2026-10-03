@@ -183,3 +183,55 @@ def test_explicit_duration_ms_is_not_rescaled(tmp_path):
     assert spans["b"].duration_ms == 2500.0
     # A non-numeric status code no longer drops the span
     assert spans["c"].status_code is None and spans["c"].is_error()
+
+
+def _metric(second):
+    return {"timestamp": f"2025-11-10T10:00:{second:02d}Z", "service": "api",
+            "metric_name": "cpu_percent", "value": 50}
+
+
+def test_symlink_escaping_source_dir_is_skipped(tmp_path):
+    """A symlink pointing outside the directory used to raise PathTraversalError
+    out of load_logs and abort the whole load; it is now skipped."""
+    outside = tmp_path / "outside.log"
+    outside.write_text("2025-11-10T10:00:00Z ERROR secret-service do not read\n")
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    (logs_dir / "app.log").write_text("2025-11-10T10:00:01Z ERROR api boom\n")
+    (logs_dir / "escape.log").symlink_to(outside)
+
+    events = load_logs(str(logs_dir))
+
+    assert [e.service for e in events] == ["api"]
+
+
+def test_file_and_event_limits_apply_to_every_loader(tmp_path):
+    from autorca_core.ingestion import load_metrics
+    from autorca_core.validation import IngestionLimits
+
+    for i in range(3):
+        _write_jsonl(tmp_path / f"m{i}.jsonl", [_metric(i * 10 + s) for s in range(4)])
+    _write_jsonl(tmp_path / "extra.json", [_metric(50)])
+
+    by_files = load_metrics(str(tmp_path), limits=IngestionLimits(max_files_per_directory=2))
+    by_events = load_metrics(str(tmp_path), limits=IngestionLimits(max_total_events=5))
+
+    # File limit spans all patterns, not just the first extension
+    assert len(by_files) == 8
+    # Event cap is enforced, not merely warned about after loading everything
+    assert len(by_events) == 5
+
+
+def test_oversized_file_is_skipped_in_directory(tmp_path):
+    from autorca_core.ingestion import load_traces
+    from autorca_core.validation import IngestionLimits
+
+    big = tmp_path / "big.json"
+    big.write_text(json.dumps([{"timestamp": "2025-11-10T10:00:00Z", "service": "api",
+                                "span_id": str(i), "trace_id": "t"} for i in range(2000)]))
+    _write_jsonl(tmp_path / "small.jsonl", [{"timestamp": "2025-11-10T10:00:00Z",
+                                            "service": "db", "span_id": "x", "trace_id": "u"}])
+
+    spans = load_traces(str(tmp_path), limits=IngestionLimits(max_file_size_mb=0.01))
+
+    assert [s.service for s in spans] == ["db"]

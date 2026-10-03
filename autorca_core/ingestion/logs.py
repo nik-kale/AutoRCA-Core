@@ -11,13 +11,11 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 
 from autorca_core.model.events import LogEvent, Severity, to_utc
+from autorca_core.ingestion._sources import load_source
 from autorca_core.logging import get_logger
 from autorca_core.validation import (
     IngestionLimits,
-    validate_path,
-    check_file_size,
     check_line_length,
-    check_total_events,
     sanitize_error_message,
 )
 
@@ -52,41 +50,13 @@ def load_logs(
     if not source_path.exists():
         raise FileNotFoundError(f"Log source not found: {source}")
 
-    events = []
-
-    if source_path.is_file():
-        check_file_size(source_path, limits)
-        events.extend(_load_log_file(source_path, limits))
-    else:
-        # Load all .log, .jsonl, .txt files in directory
-        extensions = ['*.log', '*.jsonl', '*.txt']
-        file_count = 0
-        for ext in extensions:
-            for file_path in source_path.glob(f"**/{ext}"):
-                # Validate path to prevent traversal
-                validate_path(source_path, file_path)
-
-                # Check file count limit
-                file_count += 1
-                if file_count > limits.max_files_per_directory:
-                    logger.warning(
-                        f"Reached file limit ({limits.max_files_per_directory}), "
-                        "skipping remaining files"
-                    )
-                    break
-
-                # Check file size
-                try:
-                    check_file_size(file_path, limits)
-                    events.extend(_load_log_file(file_path, limits))
-
-                    # Check total event count
-                    check_total_events(len(events), limits)
-                except Exception as e:
-                    logger.warning(
-                        f"Skipping file {file_path.name}: {sanitize_error_message(e, file_path)}"
-                    )
-                    continue
+    # A directory loads all .log, .jsonl and .txt files below it
+    events = load_source(
+        source_path,
+        ['*.log', '*.jsonl', '*.txt'],
+        lambda path: _load_log_file(path, limits),
+        limits,
+    )
 
     # Apply filters
     if time_from:

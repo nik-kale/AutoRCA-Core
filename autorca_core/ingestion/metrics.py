@@ -11,7 +11,9 @@ from datetime import datetime
 
 from autorca_core.model.events import MetricPoint, to_utc
 from autorca_core.ingestion._jsonio import read_json_records
+from autorca_core.ingestion._sources import load_source
 from autorca_core.logging import get_logger
+from autorca_core.validation import IngestionLimits
 
 logger = get_logger(__name__)
 
@@ -22,6 +24,7 @@ def load_metrics(
     time_to: Optional[datetime] = None,
     service_filter: Optional[str] = None,
     metric_filter: Optional[str] = None,
+    limits: Optional[IngestionLimits] = None,
 ) -> List[MetricPoint]:
     """
     Load metrics from a file or directory.
@@ -32,6 +35,7 @@ def load_metrics(
         time_to: End of time window (inclusive)
         service_filter: Only include metrics from this service
         metric_filter: Only include metrics with this name
+        limits: Optional ingestion limits (defaults to IngestionLimits())
 
     Returns:
         List of MetricPoint objects
@@ -41,16 +45,10 @@ def load_metrics(
     if not source_path.exists():
         raise FileNotFoundError(f"Metrics source not found: {source}")
 
-    metrics = []
-
-    if source_path.is_file():
-        metrics.extend(_load_metrics_file(source_path))
-    else:
-        # Load all .csv, .jsonl, .json files in directory
-        extensions = ['*.csv', '*.jsonl', '*.json']
-        for ext in extensions:
-            for file_path in source_path.glob(f"**/{ext}"):
-                metrics.extend(_load_metrics_file(file_path))
+    # A directory loads all .csv, .jsonl and .json files below it
+    metrics = load_source(
+        source_path, ['*.csv', '*.jsonl', '*.json'], _load_metrics_file, limits or IngestionLimits()
+    )
 
     # Apply filters
     if time_from:

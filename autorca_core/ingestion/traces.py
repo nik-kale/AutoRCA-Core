@@ -10,7 +10,9 @@ from datetime import datetime, timezone
 
 from autorca_core.model.events import Span, to_utc
 from autorca_core.ingestion._jsonio import read_json_records
+from autorca_core.ingestion._sources import load_source
 from autorca_core.logging import get_logger
+from autorca_core.validation import IngestionLimits
 
 logger = get_logger(__name__)
 
@@ -21,6 +23,7 @@ def load_traces(
     time_to: Optional[datetime] = None,
     service_filter: Optional[str] = None,
     trace_id_filter: Optional[str] = None,
+    limits: Optional[IngestionLimits] = None,
 ) -> List[Span]:
     """
     Load trace spans from a file or directory.
@@ -31,6 +34,7 @@ def load_traces(
         time_to: End of time window (inclusive)
         service_filter: Only include spans from this service
         trace_id_filter: Only include spans from this trace
+        limits: Optional ingestion limits (defaults to IngestionLimits())
 
     Returns:
         List of Span objects
@@ -40,16 +44,10 @@ def load_traces(
     if not source_path.exists():
         raise FileNotFoundError(f"Trace source not found: {source}")
 
-    spans = []
-
-    if source_path.is_file():
-        spans.extend(_load_trace_file(source_path))
-    else:
-        # Load all .jsonl, .json files in directory
-        extensions = ['*.jsonl', '*.json']
-        for ext in extensions:
-            for file_path in source_path.glob(f"**/{ext}"):
-                spans.extend(_load_trace_file(file_path))
+    # A directory loads all .jsonl and .json files below it
+    spans = load_source(
+        source_path, ['*.jsonl', '*.json'], _load_trace_file, limits or IngestionLimits()
+    )
 
     # Apply filters
     if time_from:
