@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from autorca_core.ingestion import load_logs, load_metrics, load_traces, load_configs
-from autorca_core.model.events import LogEvent, MetricPoint, Span, ConfigChange
+from autorca_core.model.events import LogEvent, MetricPoint, Span, ConfigChange, to_utc
 from autorca_core.model.graph import ServiceGraph
 from autorca_core.graph_engine.builder import build_service_graph
 from autorca_core.graph_engine.queries import GraphQueries
@@ -111,7 +111,8 @@ def run_rca(
         >>> result = run_rca(window, "API 500 errors", sources)
         >>> print(result.summary)
     """
-    time_from, time_to = incident_window
+    # Naive datetimes are treated as UTC so they compare with parsed event timestamps
+    time_from, time_to = (to_utc(t) for t in incident_window)
 
     # Use DummyLLM if no LLM provided
     if llm is None:

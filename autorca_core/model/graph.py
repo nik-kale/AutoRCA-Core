@@ -10,6 +10,8 @@ from typing import Dict, List, Set, Optional, Any
 from datetime import datetime
 from enum import Enum
 
+from autorca_core.model.events import to_utc
+
 
 class DependencyType(str, Enum):
     """Type of dependency between services."""
@@ -109,9 +111,8 @@ class IncidentNode:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
-        """Ensure timestamp is a datetime object and severity is valid."""
-        if isinstance(self.timestamp, str):
-            self.timestamp = datetime.fromisoformat(self.timestamp.replace('Z', '+00:00'))
+        """Normalize timestamp to an aware UTC datetime and clamp severity."""
+        self.timestamp = to_utc(self.timestamp)
         self.severity = max(0.0, min(1.0, self.severity))
 
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from autorca_core.model.events import MetricPoint
+from autorca_core.model.events import MetricPoint, to_utc
 from autorca_core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -54,8 +54,10 @@ def load_metrics(
 
     # Apply filters
     if time_from:
+        time_from = to_utc(time_from)
         metrics = [m for m in metrics if m.timestamp >= time_from]
     if time_to:
+        time_to = to_utc(time_to)
         metrics = [m for m in metrics if m.timestamp <= time_to]
     if service_filter:
         metrics = [m for m in metrics if m.service == service_filter]
@@ -92,7 +94,7 @@ def _parse_csv_metrics(file_path: Path) -> List[MetricPoint]:
                 if not timestamp_str:
                     continue
 
-                timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                timestamp = to_utc(timestamp_str)
                 service = row.get('service', 'unknown')
                 metric_name = row.get('metric_name') or row.get('metric', 'unknown')
                 value = float(row.get('value', 0.0))
@@ -163,7 +165,7 @@ def _parse_json_metric_item(item: Dict[str, Any]) -> Optional[MetricPoint]:
         if not timestamp_str:
             return None
 
-        timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+        timestamp = to_utc(timestamp_str)
         service = item.get('service') or item.get('service_name', 'unknown')
         metric_name = item.get('metric_name') or item.get('metric') or item.get('name', 'unknown')
         value = float(item.get('value', 0.0))

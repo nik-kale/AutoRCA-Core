@@ -8,9 +8,9 @@ import json
 import yaml
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import date, datetime
 
-from autorca_core.model.events import ConfigChange
+from autorca_core.model.events import ConfigChange, to_utc
 from autorca_core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -50,8 +50,10 @@ def load_configs(
 
     # Apply filters
     if time_from:
+        time_from = to_utc(time_from)
         changes = [c for c in changes if c.timestamp >= time_from]
     if time_to:
+        time_to = to_utc(time_to)
         changes = [c for c in changes if c.timestamp <= time_to]
     if service_filter:
         changes = [c for c in changes if c.service == service_filter]
@@ -135,7 +137,10 @@ def _parse_config_item(item: Dict[str, Any]) -> Optional[ConfigChange]:
         if not timestamp_str:
             return None
 
-        timestamp = datetime.fromisoformat(str(timestamp_str).replace('Z', '+00:00'))
+        # YAML may already have parsed an unquoted timestamp into a datetime/date
+        if not isinstance(timestamp_str, (datetime, date)):
+            timestamp_str = str(timestamp_str)
+        timestamp = to_utc(timestamp_str)
         service = item.get('service') or item.get('service_name', 'unknown')
 
         # Determine change type

@@ -7,9 +7,9 @@ Supports OpenTelemetry and Jaeger JSON formats.
 import json
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
-from autorca_core.model.events import Span
+from autorca_core.model.events import Span, to_utc
 from autorca_core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -53,8 +53,10 @@ def load_traces(
 
     # Apply filters
     if time_from:
+        time_from = to_utc(time_from)
         spans = [s for s in spans if s.timestamp >= time_from]
     if time_to:
+        time_to = to_utc(time_to)
         spans = [s for s in spans if s.timestamp <= time_to]
     if service_filter:
         spans = [s for s in spans if s.service == service_filter]
@@ -114,13 +116,13 @@ def _parse_span(item: Dict[str, Any]) -> Optional[Span]:
         if isinstance(timestamp_val, (int, float)):
             # Assume nanoseconds or microseconds
             if timestamp_val > 1e15:  # Likely nanoseconds
-                timestamp = datetime.fromtimestamp(timestamp_val / 1e9)
+                timestamp = datetime.fromtimestamp(timestamp_val / 1e9, tz=timezone.utc)
             elif timestamp_val > 1e12:  # Likely microseconds
-                timestamp = datetime.fromtimestamp(timestamp_val / 1e6)
+                timestamp = datetime.fromtimestamp(timestamp_val / 1e6, tz=timezone.utc)
             else:  # Likely seconds
-                timestamp = datetime.fromtimestamp(timestamp_val)
+                timestamp = datetime.fromtimestamp(timestamp_val, tz=timezone.utc)
         else:
-            timestamp = datetime.fromisoformat(str(timestamp_val).replace('Z', '+00:00'))
+            timestamp = to_utc(str(timestamp_val))
 
         # Extract required fields
         span_id = item.get('span_id') or item.get('spanId') or item.get('id', 'unknown')

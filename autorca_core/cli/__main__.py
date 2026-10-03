@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from autorca_core.reasoning.loop import run_rca, run_rca_from_files, DataSourcesConfig
 from autorca_core.outputs.reports import generate_markdown_report, save_report
 from autorca_core.logging import configure_logging
+from autorca_core.model.events import to_utc
 
 
 def run_mcp_server():
@@ -228,8 +229,8 @@ def run_custom_rca(args):
 
     if args.time_from and args.time_to:
         try:
-            time_from = datetime.fromisoformat(args.time_from.replace('Z', '+00:00'))
-            time_to = datetime.fromisoformat(args.time_to.replace('Z', '+00:00'))
+            time_from = to_utc(args.time_from)
+            time_to = to_utc(args.time_to)
             print(f"Time window: {time_from} to {time_to}")
         except ValueError as e:
             print(f"Error parsing time window: {e}")

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 
-from autorca_core.model.events import LogEvent, Severity
+from autorca_core.model.events import LogEvent, Severity, to_utc
 from autorca_core.logging import get_logger
 from autorca_core.validation import (
     IngestionLimits,
@@ -90,8 +90,10 @@ def load_logs(
 
     # Apply filters
     if time_from:
+        time_from = to_utc(time_from)
         events = [e for e in events if e.timestamp >= time_from]
     if time_to:
+        time_to = to_utc(time_to)
         events = [e for e in events if e.timestamp <= time_to]
     if service_filter:
         events = [e for e in events if e.service == service_filter]
@@ -143,7 +145,7 @@ def _parse_json_log(line: str) -> Optional[LogEvent]:
             # Use current time as fallback (timezone-aware)
             timestamp = datetime.now(timezone.utc)
         else:
-            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            timestamp = to_utc(timestamp_str)
 
         # Extract service
         service = data.get('service') or data.get('service_name') or data.get('app') or 'unknown'
@@ -193,7 +195,7 @@ def _parse_text_log(line: str) -> Optional[LogEvent]:
         timestamp_str, level_str, service, message = match.groups()
 
         try:
-            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            timestamp = to_utc(timestamp_str)
         except ValueError:
             timestamp = datetime.now(timezone.utc)
 

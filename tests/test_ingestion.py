@@ -63,3 +63,38 @@ def test_quickstart_logs_are_all_ingested():
     events = load_logs(str(EXAMPLES / "logs.jsonl"))
     line_count = sum(1 for line in (EXAMPLES / "logs.jsonl").read_text().splitlines() if line)
     assert len(events) == line_count
+
+
+def test_to_utc_normalizes_naive_aware_and_strings():
+    from datetime import timedelta
+
+    from autorca_core.model.events import to_utc
+
+    expected = datetime(2025, 11, 10, 10, 0, tzinfo=timezone.utc)
+    assert to_utc("2025-11-10T10:00:00Z") == expected
+    assert to_utc("2025-11-10T12:00:00+02:00") == expected
+    assert to_utc(datetime(2025, 11, 10, 10, 0)) == expected
+    assert to_utc(expected.astimezone(timezone(timedelta(hours=-8)))).tzinfo == timezone.utc
+
+
+def test_load_traces_mixes_epoch_and_iso_timestamps(tmp_path):
+    """Epoch timestamps used to produce naive datetimes that could not be sorted
+    alongside ISO "Z" timestamps from the same source."""
+    from autorca_core.ingestion import load_traces
+
+    trace_file = tmp_path / "traces.jsonl"
+    _write_jsonl(
+        trace_file,
+        [
+            {"timestamp": "2025-11-10T10:00:01Z", "service": "api", "span_id": "b",
+             "trace_id": "t"},
+            # 2025-11-10T10:00:00Z in epoch nanoseconds
+            {"start_time": 1762768800_000_000_000, "service": "db", "span_id": "a",
+             "trace_id": "t"},
+        ],
+    )
+
+    spans = load_traces(str(trace_file))
+
+    assert [s.span_id for s in spans] == ["a", "b"]
+    assert spans[0].timestamp == datetime(2025, 11, 10, 10, 0, tzinfo=timezone.utc)

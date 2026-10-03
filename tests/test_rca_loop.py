@@ -57,3 +57,25 @@ def test_run_rca_honors_threshold_config(tmp_path):
     # 1500ms breaches the default 1000ms threshold but not the relaxed 2000ms one.
     assert len(latency_incidents(default)) == 1
     assert latency_incidents(relaxed) == []
+
+
+def test_run_rca_accepts_naive_window_with_utc_data(tmp_path):
+    """The README passes naive datetimes while the data carries "Z" timestamps."""
+    logs_file = tmp_path / "logs.jsonl"
+    _write_jsonl(
+        logs_file,
+        [
+            {"timestamp": f"2025-11-10T10:00:0{s}Z", "service": "db", "level": "ERROR",
+             "message": f"connection refused {s}"}
+            for s in range(3)
+        ]
+        + [{"timestamp": "2025-11-10T11:00:00Z", "service": "db", "level": "ERROR",
+            "message": "outside the window"}],
+    )
+    window = (datetime(2025, 11, 10, 10, 0, 0), datetime(2025, 11, 10, 10, 5, 0))
+
+    result = run_rca(window, "db errors", DataSourcesConfig(logs_dir=str(logs_file)))
+
+    assert result.metadata["num_logs"] == 3
+    assert result.metadata["window_start"] == "2025-11-10T10:00:00+00:00"
+    assert result.root_cause_candidates[0].service == "db"

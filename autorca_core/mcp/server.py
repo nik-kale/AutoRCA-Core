@@ -19,6 +19,7 @@ from autorca_core.ingestion import load_logs, load_metrics, load_traces
 from autorca_core.graph_engine.builder import build_service_graph
 from autorca_core.reasoning.rules import apply_rules
 from autorca_core.config import ThresholdConfig
+from autorca_core.model.events import to_utc
 from autorca_core.logging import configure_logging, get_logger
 
 logger = get_logger(__name__)
@@ -244,8 +245,8 @@ async def _handle_analyze_logs(args: Dict[str, Any]) -> str:
     service_filter = args.get("service_filter")
 
     # Parse times
-    time_from = datetime.fromisoformat(time_from_str) if time_from_str else None
-    time_to = datetime.fromisoformat(time_to_str) if time_to_str else None
+    time_from = to_utc(time_from_str) if time_from_str else None
+    time_to = to_utc(time_to_str) if time_to_str else None
 
     logger.info(f"Analyzing logs from: {logs_path}")
 
