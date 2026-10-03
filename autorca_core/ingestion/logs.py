@@ -60,11 +60,6 @@ def load_logs(
     else:
         # Load all .log, .jsonl, .txt files in directory
         extensions = ['*.log', '*.jsonl', '*.txt']
-<<<<<<< HEAD
-        for ext in extensions:
-            for file_path in source_path.glob(f"**/{ext}"):
-                events.extend(_load_log_file(file_path))
-=======
         file_count = 0
         for ext in extensions:
             for file_path in source_path.glob(f"**/{ext}"):
@@ -74,7 +69,10 @@ def load_logs(
                 # Check file count limit
                 file_count += 1
                 if file_count > limits.max_files_per_directory:
-                    print(f"Warning: Reached file limit ({limits.max_files_per_directory}), skipping remaining files")
+                    logger.warning(
+                        f"Reached file limit ({limits.max_files_per_directory}), "
+                        "skipping remaining files"
+                    )
                     break
 
                 # Check file size
@@ -85,9 +83,10 @@ def load_logs(
                     # Check total event count
                     check_total_events(len(events), limits)
                 except Exception as e:
-                    print(f"Warning: Skipping file {file_path.name}: {sanitize_error_message(e, file_path)}")
+                    logger.warning(
+                        f"Skipping file {file_path.name}: {sanitize_error_message(e, file_path)}"
+                    )
                     continue
->>>>>>> 0ac8e01 (security: add input validation and size limits for data ingestion)
 
     # Apply filters
     if time_from:
@@ -125,11 +124,10 @@ def _load_log_file(file_path: Path, limits: IngestionLimits) -> List[LogEvent]:
                         events.append(event)
             except Exception as e:
                 # Log parsing errors are non-fatal
-<<<<<<< HEAD
-                logger.warning(f"Failed to parse line {line_num} in {file_path}: {e}")
-=======
-                print(f"Warning: Failed to parse line {line_num} in {file_path.name}: {sanitize_error_message(e)}")
->>>>>>> 0ac8e01 (security: add input validation and size limits for data ingestion)
+                logger.warning(
+                    f"Failed to parse line {line_num} in {file_path.name}: "
+                    f"{sanitize_error_message(e)}"
+                )
 
     return events
 

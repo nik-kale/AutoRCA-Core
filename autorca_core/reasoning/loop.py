@@ -142,25 +142,19 @@ def run_rca(
         logger.info(f"  Loaded {len(configs)} config changes")
 
     # Step 2: Build service graph
-<<<<<<< HEAD
     logger.info("Building service graph...")
-    graph = build_service_graph(logs=logs, metrics=metrics, traces=traces, configs=configs)
-    logger.info(f"  Graph: {len(graph.services)} services, {len(graph.dependencies)} dependencies, {len(graph.incidents)} incidents")
+    graph = build_service_graph(
+        logs=logs, metrics=metrics, traces=traces, configs=configs, thresholds=thresholds
+    )
+    logger.info(
+        f"  Graph: {len(graph.services)} services, {len(graph.dependencies)} dependencies, "
+        f"{len(graph.incidents)} incidents"
+    )
 
     # Step 3: Run rule-based analysis
     logger.info("Applying RCA rules...")
-    candidates = apply_rules(graph)
-    logger.info(f"  Identified {len(candidates)} root cause candidates")
-=======
-    print("Building service graph...")
-    graph = build_service_graph(logs=logs, metrics=metrics, traces=traces, configs=configs, thresholds=thresholds)
-    print(f"  Graph: {len(graph.services)} services, {len(graph.dependencies)} dependencies, {len(graph.incidents)} incidents")
-
-    # Step 3: Run rule-based analysis
-    print("Applying RCA rules...")
     candidates = apply_rules(graph, thresholds=thresholds)
-    print(f"  Identified {len(candidates)} root cause candidates")
->>>>>>> b2361b9 (feat: add configurable detection thresholds for anomaly detection)
+    logger.info(f"  Identified {len(candidates)} root cause candidates")
 
     # Step 4: Generate summary using LLM
     logger.info("Generating RCA summary...")
