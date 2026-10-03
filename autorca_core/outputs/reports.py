@@ -467,16 +467,21 @@ def _generate_service_graph_svg(graph: ServiceGraph, candidates: List[RootCauseC
     # Calculate positions (simple circular layout)
     import math
     radius = max(200, num_services * 30)
+    # Size the canvas to the layout so nodes on larger graphs are not clipped
+    # (node radius 40 plus the incident badge needs ~60px around the circle).
+    size = int(2 * (radius + 60))
+    center = size / 2
     positions = {}
     for i, service in enumerate(services):
         angle = 2 * math.pi * i / num_services
-        x = 400 + radius * math.cos(angle)
-        y = 300 + radius * math.sin(angle)
+        x = center + radius * math.cos(angle)
+        y = center + radius * math.sin(angle)
         positions[service] = (x, y)
 
     # Build SVG
     svg_parts = [
-        f'<svg width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">',
+        f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" '
+        'xmlns="http://www.w3.org/2000/svg">',
         '<defs>',
         '<marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">',
         '<polygon points="0 0, 10 3.5, 0 7" fill="#999" />',

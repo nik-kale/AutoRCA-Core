@@ -73,3 +73,22 @@ def test_json_report_round_trips(hostile_result, tmp_path):
 
     with pytest.raises(ValueError):
         save_report(hostile_result, str(tmp_path / "r.pdf"), format="pdf")
+
+
+def test_service_graph_svg_fits_every_node():
+    """The canvas was fixed at 800x600 while the layout radius grows with the number
+    of services, so graphs with more than about seven services were clipped."""
+    import re
+
+    from autorca_core.outputs.reports import _generate_service_graph_svg
+
+    graph = ServiceGraph()
+    for i in range(12):
+        graph.add_dependency(Dependency(from_service="gateway", to_service=f"svc-{i}"))
+
+    svg = _generate_service_graph_svg(graph, [])
+
+    width, height = map(float, re.search(r'viewBox="0 0 (\S+) (\S+)"', svg).groups())
+    for cx, cy, r in re.findall(r'<circle cx="([\d.\-]+)" cy="([\d.\-]+)" r="(\d+)"', svg):
+        cx, cy, r = float(cx), float(cy), float(r)
+        assert r <= cx <= width - r and r <= cy <= height - r
