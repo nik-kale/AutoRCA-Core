@@ -61,6 +61,9 @@ class LogEvent(Event):
         error_type: Error class or type (optional)
         stack_trace: Stack trace if available (optional)
     """
+    # Re-declared with a default so callers (and the log parsers) don't have to
+    # pass it; the base class leaves it required.
+    event_type: EventType = EventType.LOG
     message: str = ""
     level: Severity = Severity.INFO
     logger: Optional[str] = None
