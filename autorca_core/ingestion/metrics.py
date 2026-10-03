@@ -4,13 +4,13 @@ Metrics ingestion: Load and parse metric time-series data.
 Supports CSV, JSON, and Prometheus-style formats.
 """
 
-import json
 import csv
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from autorca_core.model.events import MetricPoint, to_utc
+from autorca_core.ingestion._jsonio import read_json_records
 from autorca_core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -113,8 +113,8 @@ def _parse_csv_metrics(file_path: Path) -> List[MetricPoint]:
                     tags=tags,
                     raw_data=row,
                 ))
-            except (ValueError, KeyError) as e:
-                logger.warning(f"Failed to parse CSV row in {file_path}: {e}")
+            except (ValueError, KeyError, TypeError) as e:
+                logger.warning(f"Failed to parse CSV row in {file_path.name}: {e}")
 
     return metrics
 
@@ -126,40 +126,17 @@ def _parse_json_metrics(file_path: Path) -> List[MetricPoint]:
     Each line/object should contain: timestamp, service, metric_name, value
     """
     metrics = []
-
-    with open(file_path, 'r', encoding='utf-8') as f:
-        # Try to parse as JSON array first
-        try:
-            data = json.load(f)
-            if isinstance(data, list):
-                for item in data:
-                    metric = _parse_json_metric_item(item)
-                    if metric:
-                        metrics.append(metric)
-                return metrics
-        except json.JSONDecodeError:
-            # Fall back to JSON Lines
-            f.seek(0)
-
-        # Parse as JSON Lines
-        for line_num, line in enumerate(f, start=1):
-            line = line.strip()
-            if not line:
-                continue
-
-            try:
-                item = json.loads(line)
-                metric = _parse_json_metric_item(item)
-                if metric:
-                    metrics.append(metric)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse JSON line {line_num} in {file_path}: {e}")
-
+    for item in read_json_records(file_path):
+        metric = _parse_json_metric_item(item)
+        if metric:
+            metrics.append(metric)
     return metrics
 
 
 def _parse_json_metric_item(item: Dict[str, Any]) -> Optional[MetricPoint]:
     """Parse a single JSON metric object."""
+    if not isinstance(item, dict):
+        return None
     try:
         timestamp_str = item.get('timestamp') or item.get('time')
         if not timestamp_str:
@@ -187,5 +164,5 @@ def _parse_json_metric_item(item: Dict[str, Any]) -> Optional[MetricPoint]:
             tags=tags,
             raw_data=item,
         )
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, TypeError):
         return None

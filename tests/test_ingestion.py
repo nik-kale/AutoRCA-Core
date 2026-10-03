@@ -98,3 +98,88 @@ def test_load_traces_mixes_epoch_and_iso_timestamps(tmp_path):
 
     assert [s.span_id for s in spans] == ["a", "b"]
     assert spans[0].timestamp == datetime(2025, 11, 10, 10, 0, tzinfo=timezone.utc)
+
+
+def test_load_configs_from_directory_finds_json_and_yaml(tmp_path):
+    """The directory glob used brace expansion, which pathlib does not support,
+    so a configs directory always loaded zero changes."""
+    from autorca_core.ingestion import load_configs
+
+    (tmp_path / "deploys.json").write_text(
+        json.dumps([{"timestamp": "2025-11-10T10:00:00Z", "service": "api", "type": "deploy",
+                     "version": "v2"}])
+    )
+    (tmp_path / "flags.yaml").write_text(
+        "- timestamp: 2025-11-10T10:01:00Z\n  service: db\n  change_type: config\n"
+    )
+
+    changes = load_configs(str(tmp_path))
+
+    assert [(c.service, c.change_type) for c in changes] == [
+        ("api", "deployment"),
+        ("db", "config"),
+    ]
+
+
+def test_single_record_json_files_are_not_dropped(tmp_path):
+    """A one-line JSONL file (or a single JSON object) used to be read as a
+    top-level object, ignored, and then the exhausted file yielded nothing."""
+    from autorca_core.ingestion import load_configs, load_metrics, load_traces
+
+    metric = tmp_path / "metrics.jsonl"
+    metric.write_text(json.dumps({"timestamp": "2025-11-10T10:00:00Z", "service": "api",
+                                  "metric_name": "cpu_percent", "value": 97}) + "\n")
+    span = tmp_path / "traces.json"
+    span.write_text(json.dumps({"timestamp": "2025-11-10T10:00:00Z", "service": "api",
+                                "span_id": "s1", "trace_id": "t1"}))
+    change = tmp_path / "change.json"
+    change.write_text(json.dumps({"timestamp": "2025-11-10T10:00:00Z", "service": "api"}))
+
+    assert len(load_metrics(str(metric))) == 1
+    assert len(load_traces(str(span))) == 1
+    assert len(load_configs(str(change))) == 1
+
+
+def test_malformed_records_are_skipped_not_fatal(tmp_path):
+    from autorca_core.ingestion import load_metrics
+
+    metric = tmp_path / "metrics.jsonl"
+    metric.write_text(
+        "\n".join([
+            json.dumps("not an object"),
+            json.dumps({"timestamp": "2025-11-10T10:00:00Z", "service": "api",
+                        "metric_name": "cpu_percent", "value": None}),
+            json.dumps({"timestamp": "2025-11-10T10:00:01Z", "service": "api",
+                        "metric_name": "cpu_percent", "value": 42}),
+        ]) + "\n"
+    )
+
+    metrics = load_metrics(str(metric))
+
+    assert [m.value for m in metrics] == [42.0]
+
+
+def test_explicit_duration_ms_is_not_rescaled(tmp_path):
+    """duration_ms=1500 is 1.5s; the unit heuristic used to treat it as
+    microseconds and report 1.5ms, hiding the latency."""
+    from autorca_core.ingestion import load_traces
+
+    trace_file = tmp_path / "traces.jsonl"
+    _write_jsonl(
+        trace_file,
+        [
+            {"timestamp": "2025-11-10T10:00:00Z", "service": "api", "span_id": "a",
+             "trace_id": "t", "duration_ms": 1500},
+            {"timestamp": "2025-11-10T10:00:01Z", "service": "api", "span_id": "b",
+             "trace_id": "t", "duration": 2_500_000_000},  # unitless, nanoseconds
+            {"timestamp": "2025-11-10T10:00:02Z", "service": "api", "span_id": "c",
+             "trace_id": "t", "status_code": "ERROR", "error": True},
+        ],
+    )
+
+    spans = {s.span_id: s for s in load_traces(str(trace_file))}
+
+    assert spans["a"].duration_ms == 1500.0
+    assert spans["b"].duration_ms == 2500.0
+    # A non-numeric status code no longer drops the span
+    assert spans["c"].status_code is None and spans["c"].is_error()

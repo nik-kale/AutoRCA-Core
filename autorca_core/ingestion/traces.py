@@ -4,12 +4,12 @@ Trace ingestion: Load and parse distributed trace spans.
 Supports OpenTelemetry and Jaeger JSON formats.
 """
 
-import json
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 
 from autorca_core.model.events import Span, to_utc
+from autorca_core.ingestion._jsonio import read_json_records
 from autorca_core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -69,35 +69,10 @@ def load_traces(
 def _load_trace_file(file_path: Path) -> List[Span]:
     """Load a single trace file."""
     spans = []
-
-    with open(file_path, 'r', encoding='utf-8') as f:
-        # Try to parse as JSON array first
-        try:
-            data = json.load(f)
-            if isinstance(data, list):
-                for item in data:
-                    span = _parse_span(item)
-                    if span:
-                        spans.append(span)
-                return spans
-        except json.JSONDecodeError:
-            # Fall back to JSON Lines
-            f.seek(0)
-
-        # Parse as JSON Lines
-        for line_num, line in enumerate(f, start=1):
-            line = line.strip()
-            if not line:
-                continue
-
-            try:
-                item = json.loads(line)
-                span = _parse_span(item)
-                if span:
-                    spans.append(span)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse JSON line {line_num} in {file_path}: {e}")
-
+    for item in read_json_records(file_path):
+        span = _parse_span(item)
+        if span:
+            spans.append(span)
     return spans
 
 
@@ -105,8 +80,10 @@ def _parse_span(item: Dict[str, Any]) -> Optional[Span]:
     """
     Parse a span from JSON.
 
-    Supports OpenTelemetry and Jaeger-style span formats.
+    Supports flat span records using OpenTelemetry- or Jaeger-style field names.
     """
+    if not isinstance(item, dict):
+        return None
     try:
         # Extract timestamp (may be in nanoseconds or ISO format)
         timestamp_val = item.get('timestamp') or item.get('start_time') or item.get('startTime')
@@ -133,17 +110,21 @@ def _parse_span(item: Dict[str, Any]) -> Optional[Span]:
         parent_span_id = item.get('parent_span_id') or item.get('parentSpanId') or item.get('parent_id')
         operation_name = item.get('operation_name') or item.get('operationName') or item.get('name', '')
 
-        # Extract duration (may be in nanoseconds, microseconds, or milliseconds)
-        duration_val = item.get('duration') or item.get('duration_ms') or 0.0
-        if isinstance(duration_val, (int, float)):
-            if duration_val > 1e6:  # Likely nanoseconds
-                duration_ms = duration_val / 1e6
-            elif duration_val > 1e3:  # Likely microseconds
-                duration_ms = duration_val / 1e3
-            else:  # Likely milliseconds
-                duration_ms = float(duration_val)
+        # Extract duration. An explicit duration_ms is taken as-is; a bare
+        # "duration" has no unit, so guess it from the magnitude.
+        if item.get('duration_ms') is not None:
+            duration_ms = float(item['duration_ms'])
         else:
-            duration_ms = 0.0
+            duration_val = item.get('duration') or 0.0
+            if isinstance(duration_val, (int, float)):
+                if duration_val > 1e6:  # Likely nanoseconds
+                    duration_ms = duration_val / 1e6
+                elif duration_val > 1e3:  # Likely microseconds
+                    duration_ms = duration_val / 1e3
+                else:  # Likely milliseconds
+                    duration_ms = float(duration_val)
+            else:
+                duration_ms = 0.0
 
         # Extract status
         status_code = item.get('status_code') or item.get('statusCode') or item.get('http_status')
@@ -164,10 +145,18 @@ def _parse_span(item: Dict[str, Any]) -> Optional[Span]:
             parent_span_id=str(parent_span_id) if parent_span_id else None,
             operation_name=operation_name,
             duration_ms=duration_ms,
-            status_code=int(status_code) if status_code else None,
+            status_code=_parse_status_code(status_code),
             error=error,
             tags=tags,
             raw_data=item,
         )
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def _parse_status_code(value: Any) -> Optional[int]:
+    """Return a numeric status code, or None for missing/non-numeric values."""
+    try:
+        return int(value) if value else None
+    except (TypeError, ValueError):
         return None
