@@ -16,6 +16,11 @@ from autorca_core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# HTTP statuses worth retrying: timeouts, conflicts, rate limits and server errors.
+# Anything else in the 4xx range (bad request, auth, unknown model) fails the same
+# way on every attempt.
+_RETRYABLE_STATUS_CODES = {408, 409, 429}
+
 
 class LLMInterface(Protocol):
     """
@@ -166,18 +171,20 @@ class AnthropicLLM:
     Anthropic Claude LLM integration for RCA summarization.
 
     Features:
-    - Automatic retry with exponential backoff
+    - Automatic retry with exponential backoff for transient errors
     - Token usage tracking
     - Cost estimation
-    - Error handling with fallback to DummyLLM
+    - summarize_rca() falls back to the DummyLLM template if the API call fails
     """
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "claude-3-5-sonnet-20241022",
-        max_tokens: int = 2048,
+        model: str = "claude-sonnet-5-5",
+        max_tokens: int = 16000,
         max_retries: int = 3,
+        input_cost_per_mtok: float = 2.0,
+        output_cost_per_mtok: float = 10.0,
     ):
         """
         Initialize Anthropic LLM client.
@@ -185,8 +192,12 @@ class AnthropicLLM:
         Args:
             api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
             model: Model name to use
-            max_tokens: Maximum tokens in response
-            max_retries: Maximum number of retry attempts
+            max_tokens: Maximum tokens in response. Current models think before
+                answering and thinking counts toward this limit, so leave headroom.
+            max_retries: Maximum number of attempts for transient API errors
+            input_cost_per_mtok: USD per million input tokens, for cost estimates
+                (default: Claude Sonnet 5.5 list price)
+            output_cost_per_mtok: USD per million output tokens, for cost estimates
         """
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not self.api_key:
@@ -198,6 +209,8 @@ class AnthropicLLM:
         self.model = model
         self.max_tokens = max_tokens
         self.max_retries = max_retries
+        self.input_cost_per_mtok = input_cost_per_mtok
+        self.output_cost_per_mtok = output_cost_per_mtok
         self.total_tokens_used = 0
         self.total_cost_usd = 0.0
 
@@ -225,7 +238,9 @@ class AnthropicLLM:
             primary_symptom: The primary symptom reported
 
         Returns:
-            Comprehensive RCA summary with remediation steps
+            Comprehensive RCA summary with remediation steps. If the API call fails
+            after retries, the rule-based DummyLLM summary is returned instead so the
+            RCA result is not lost.
         """
         if not candidates:
             return f"No root cause candidates identified for: {primary_symptom}"
@@ -234,9 +249,11 @@ class AnthropicLLM:
         user_prompt = self._build_rca_prompt(graph, candidates, primary_symptom)
 
         # Call Claude API with retry logic
-        response_text = self._call_claude_with_retry(user_prompt)
-
-        return response_text
+        try:
+            return self._call_claude_with_retry(user_prompt)
+        except RuntimeError as e:
+            logger.warning(f"Falling back to rule-based summary: {e}")
+            return DummyLLM().summarize_rca(graph, candidates, primary_symptom)
 
     def enhance_remediation(
         self,
@@ -276,9 +293,7 @@ Please provide enhanced, detailed remediation steps including:
 Return the steps as a numbered list."""
 
         try:
-            response_text = self._call_claude_with_retry(
-                user_prompt, system_prompt=system_prompt, max_tokens=1024
-            )
+            response_text = self._call_claude_with_retry(user_prompt, system_prompt=system_prompt)
 
             # Parse numbered list from response
             lines = response_text.strip().split('\n')
@@ -320,7 +335,11 @@ Return the steps as a numbered list."""
         # Add service graph structure
         if graph.dependencies:
             prompt_parts.append("**Service Dependencies:**")
-            for dep in graph.dependencies[:10]:  # Limit to 10
+            # dependencies is a set: sort for a stable prompt, then limit to 10
+            dependencies = sorted(
+                graph.dependencies, key=lambda d: (d.from_service, d.to_service)
+            )
+            for dep in dependencies[:10]:
                 prompt_parts.append(f"- {dep.from_service} → {dep.to_service} ({dep.dependency_type.value})")
             prompt_parts.append("")
 
@@ -415,40 +434,56 @@ Be concise, technical, and actionable. Focus on facts from the data provided."""
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_prompt}],
                 )
-
-                # Track token usage
-                input_tokens = response.usage.input_tokens
-                output_tokens = response.usage.output_tokens
-                total_tokens = input_tokens + output_tokens
-
-                self.total_tokens_used += total_tokens
-
-                # Estimate cost (approximate pricing for Claude 3.5 Sonnet)
-                # Input: $3/MTok, Output: $15/MTok
-                cost = (input_tokens / 1_000_000 * 3.0) + (output_tokens / 1_000_000 * 15.0)
-                self.total_cost_usd += cost
-
-                logger.info(
-                    f"API call successful. Tokens: {total_tokens} "
-                    f"(in: {input_tokens}, out: {output_tokens}), "
-                    f"Cost: ${cost:.4f}"
-                )
-
-                # Extract text from response
-                return response.content[0].text
-
             except Exception as e:
                 last_error = e
                 logger.warning(f"API call failed (attempt {attempt + 1}): {e}")
+
+                status = getattr(e, "status_code", None)
+                if isinstance(status, int) and status < 500 and status not in _RETRYABLE_STATUS_CODES:
+                    break  # Retrying will not change the outcome
 
                 if attempt < self.max_retries - 1:
                     # Exponential backoff: 1s, 2s, 4s
                     wait_time = 2 ** attempt
                     logger.info(f"Retrying in {wait_time}s...")
                     time.sleep(wait_time)
+                continue
 
-        # All retries failed
-        error_msg = f"Failed to call Anthropic API after {self.max_retries} attempts: {last_error}"
+            # Track token usage
+            input_tokens = response.usage.input_tokens
+            output_tokens = response.usage.output_tokens
+            total_tokens = input_tokens + output_tokens
+
+            self.total_tokens_used += total_tokens
+
+            # Estimate cost from the configured per-million-token prices
+            cost = (
+                input_tokens / 1_000_000 * self.input_cost_per_mtok
+                + output_tokens / 1_000_000 * self.output_cost_per_mtok
+            )
+            self.total_cost_usd += cost
+
+            logger.info(
+                f"API call successful. Tokens: {total_tokens} "
+                f"(in: {input_tokens}, out: {output_tokens}), "
+                f"Cost: ${cost:.4f}"
+            )
+
+            # The response can start with thinking blocks, so read text by block
+            # type rather than taking content[0].
+            text = "".join(
+                block.text for block in response.content if getattr(block, "type", None) == "text"
+            ).strip()
+            if text:
+                return text
+
+            # e.g. stop_reason "refusal", or max_tokens spent on thinking. The same
+            # request would most likely end the same way, so do not retry.
+            last_error = RuntimeError(f"response contained no text (stop_reason={response.stop_reason})")
+            break
+
+        # All retries failed (or the error was not retryable)
+        error_msg = f"Failed to call Anthropic API: {last_error}"
         logger.error(error_msg)
         raise RuntimeError(error_msg)
 
