@@ -156,26 +156,23 @@ class GraphBuilder:
         for log in error_logs:
             by_service[log.service].append(log)
 
-        # Detect spikes using configurable thresholds
+        # Detect spikes using configurable thresholds: enough errors inside one
+        # error_spike_window_seconds window (not across the whole data set, so a
+        # stray earlier error does not mask a later burst)
         for service, service_errors in by_service.items():
-            if len(service_errors) >= self.thresholds.error_spike_count:
-                # Sort by timestamp
-                service_errors.sort(key=lambda e: e.timestamp)
-                first_error = service_errors[0]
-                last_error = service_errors[-1]
-
-                # If errors span less than threshold window, it's a spike
-                time_span = (last_error.timestamp - first_error.timestamp).total_seconds()
-                if time_span <= self.thresholds.error_spike_window_seconds:
-                    evidence = [f"Error: {e.message}" for e in service_errors[:5]]  # Show first 5
-                    self.graph.add_incident(IncidentNode(
-                        service=service,
-                        incident_type=IncidentType.ERROR_SPIKE,
-                        timestamp=first_error.timestamp,
-                        severity=0.8,
-                        description=f"{len(service_errors)} errors in {time_span:.0f}s",
-                        evidence=evidence,
-                    ))
+            service_errors.sort(key=lambda e: e.timestamp)
+            burst = _densest_window(service_errors, self.thresholds.error_spike_window_seconds)
+            if len(burst) >= self.thresholds.error_spike_count:
+                time_span = (burst[-1].timestamp - burst[0].timestamp).total_seconds()
+                evidence = [f"Error: {e.message}" for e in burst[:5]]  # Show first 5
+                self.graph.add_incident(IncidentNode(
+                    service=service,
+                    incident_type=IncidentType.ERROR_SPIKE,
+                    timestamp=burst[0].timestamp,
+                    severity=0.8,
+                    description=f"{len(burst)} errors in {time_span:.0f}s",
+                    evidence=evidence,
+                ))
 
     def _detect_metric_anomalies(self, service: str, metrics: List[MetricPoint]) -> None:
         """
@@ -229,19 +226,36 @@ class GraphBuilder:
         for span in error_spans:
             by_service[span.service].append(span)
 
-        # Detect error spikes (3+ error spans)
+        # Detect error spikes using the same configurable thresholds as logs
         for service, service_errors in by_service.items():
-            if len(service_errors) >= 3:
-                service_errors.sort(key=lambda s: s.timestamp)
-                evidence = [f"Span error: {s.operation_name} (status={s.status_code})" for s in service_errors[:5]]
+            service_errors.sort(key=lambda s: s.timestamp)
+            burst = _densest_window(service_errors, self.thresholds.error_spike_window_seconds)
+            if len(burst) >= self.thresholds.error_spike_count:
+                evidence = [f"Span error: {s.operation_name} (status={s.status_code})" for s in burst[:5]]
                 self.graph.add_incident(IncidentNode(
                     service=service,
                     incident_type=IncidentType.ERROR_SPIKE,
-                    timestamp=service_errors[0].timestamp,
+                    timestamp=burst[0].timestamp,
                     severity=0.8,
-                    description=f"{len(service_errors)} failed spans",
+                    description=f"{len(burst)} failed spans",
                     evidence=evidence,
                 ))
+
+
+def _densest_window(items: list, window_seconds: float) -> list:
+    """
+    Return the longest run of timestamp-sorted items spanning at most window_seconds.
+
+    Ties keep the earliest run.
+    """
+    best_start, best_end = 0, -1
+    start = 0
+    for end in range(len(items)):
+        while (items[end].timestamp - items[start].timestamp).total_seconds() > window_seconds:
+            start += 1
+        if end - start > best_end - best_start:
+            best_start, best_end = start, end
+    return items[best_start:best_end + 1]
 
 
 def build_service_graph(

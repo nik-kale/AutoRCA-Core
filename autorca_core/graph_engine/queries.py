@@ -221,8 +221,10 @@ class GraphQueries:
         total_severity = sum(i.severity for i in chain.incidents)
         score += total_severity
 
-        # Bonus for temporal ordering
-        incidents_by_service = {i.service: i for i in chain.incidents}
+        # Bonus for temporal ordering, using each service's earliest incident
+        incidents_by_service: Dict[str, IncidentNode] = {}
+        for incident in sorted(chain.incidents, key=lambda i: i.timestamp):
+            incidents_by_service.setdefault(incident.service, incident)
         properly_ordered = True
         for i in range(len(chain.services) - 1):
             service_a = chain.services[i]

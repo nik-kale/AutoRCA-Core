@@ -87,7 +87,34 @@ def apply_rules(graph: ServiceGraph, thresholds: Optional[ThresholdConfig] = Non
     # Sort by confidence (highest first)
     candidates.sort(key=lambda c: c.confidence, reverse=True)
 
-    return candidates
+    return _merge_duplicate_candidates(candidates)
+
+
+def _merge_duplicate_candidates(candidates: List[RootCauseCandidate]) -> List[RootCauseCandidate]:
+    """
+    Collapse candidates that several rules raised for the same service and incident type.
+
+    Without this, one failing database can fill the whole top-N list. The
+    highest-confidence candidate is kept (input must be sorted by confidence), and
+    evidence and remediation lines from the others are appended without repeats.
+    """
+    merged: Dict[tuple, RootCauseCandidate] = {}
+    for candidate in candidates:
+        key = (candidate.service, candidate.incident_type)
+        kept = merged.get(key)
+        if kept is None:
+            merged[key] = RootCauseCandidate(
+                service=candidate.service,
+                incident_type=candidate.incident_type,
+                confidence=candidate.confidence,
+                explanation=candidate.explanation,
+                evidence=list(candidate.evidence),
+                remediation=list(candidate.remediation),
+            )
+            continue
+        kept.evidence.extend(e for e in candidate.evidence if e not in kept.evidence)
+        kept.remediation.extend(r for r in candidate.remediation if r not in kept.remediation)
+    return list(merged.values())
 
 
 def _rule_recent_changes(graph: ServiceGraph, queries: GraphQueries, thresholds: ThresholdConfig) -> List[RootCauseCandidate]:
@@ -116,11 +143,13 @@ def _rule_recent_changes(graph: ServiceGraph, queries: GraphQueries, thresholds:
             if i.incident_type not in (IncidentType.DEPLOYMENT, IncidentType.CONFIG_CHANGE)
         ]
 
-        # Check if other incidents occurred shortly after the change using configurable threshold
+        # Check if other incidents occurred shortly after the change using configurable
+        # threshold. Incidents that started before the change cannot have been caused by it.
         for change in change_incidents:
             nearby_incidents = [
                 i for i in other_incidents
-                if abs((i.timestamp - change.timestamp).total_seconds()) < thresholds.change_correlation_seconds
+                if 0 <= (i.timestamp - change.timestamp).total_seconds()
+                < thresholds.change_correlation_seconds
             ]
 
             if nearby_incidents:
