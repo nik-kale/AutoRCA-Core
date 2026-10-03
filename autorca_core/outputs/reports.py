@@ -3,6 +3,7 @@ Report generation: Create RCA reports in markdown, JSON, and other formats.
 """
 
 import json
+from html import escape
 from typing import Dict, Any, List
 from datetime import datetime
 
@@ -180,12 +181,22 @@ def generate_html_report(result: RCARunResult) -> str:
     # Generate candidates HTML
     candidates_html = _generate_candidates_html(result.root_cause_candidates)
 
+    # Everything below can contain text from the analysed data (log messages end up
+    # in evidence and summaries), so it is escaped before it is placed in the page.
+    symptom = escape(result.primary_symptom)
+    summary = escape(result.summary)
+    window_start = escape(str(result.metadata.get('window_start', 'N/A')))
+    window_end = escape(str(result.metadata.get('window_end', 'N/A')))
+    num_services = escape(str(result.metadata.get('num_services', 0)))
+    num_incidents = escape(str(result.metadata.get('num_incidents', 0)))
+    num_logs = escape(str(result.metadata.get('num_logs', 0)))
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RCA Report - {result.primary_symptom}</title>
+    <title>RCA Report - {symptom}</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
@@ -365,9 +376,9 @@ def generate_html_report(result: RCARunResult) -> str:
     <div class="header">
         <h1>🔍 Root Cause Analysis Report</h1>
         <div class="meta">
-            <strong>Incident:</strong> {result.primary_symptom}<br>
+            <strong>Incident:</strong> {symptom}<br>
             <strong>Analysis Time:</strong> {datetime.now().isoformat()}<br>
-            <strong>Window:</strong> {result.metadata.get('window_start', 'N/A')} to {result.metadata.get('window_end', 'N/A')}
+            <strong>Window:</strong> {window_start} to {window_end}
         </div>
     </div>
 
@@ -375,11 +386,11 @@ def generate_html_report(result: RCARunResult) -> str:
         <h2>📊 Overview</h2>
         <div class="stats">
             <div class="stat-card">
-                <div class="value">{result.metadata.get('num_services', 0)}</div>
+                <div class="value">{num_services}</div>
                 <div class="label">Services</div>
             </div>
             <div class="stat-card">
-                <div class="value">{result.metadata.get('num_incidents', 0)}</div>
+                <div class="value">{num_incidents}</div>
                 <div class="label">Incidents</div>
             </div>
             <div class="stat-card">
@@ -387,7 +398,7 @@ def generate_html_report(result: RCARunResult) -> str:
                 <div class="label">Candidates</div>
             </div>
             <div class="stat-card">
-                <div class="value">{result.metadata.get('num_logs', 0)}</div>
+                <div class="value">{num_logs}</div>
                 <div class="label">Log Events</div>
             </div>
         </div>
@@ -395,7 +406,7 @@ def generate_html_report(result: RCARunResult) -> str:
 
     <div class="section">
         <h2>📝 Executive Summary</h2>
-        <div class="summary">{result.summary}</div>
+        <div class="summary">{summary}</div>
     </div>
 
     <div class="section">
@@ -499,7 +510,8 @@ def _generate_service_graph_svg(graph: ServiceGraph, candidates: List[RootCauseC
         label = service[:10] + "..." if len(service) > 10 else service
         svg_parts.append(
             f'<text x="{x}" y="{y}" text-anchor="middle" dominant-baseline="middle" '
-            f'fill="white" font-size="12" font-weight="bold">{label}</text>'
+            f'fill="white" font-size="12" font-weight="bold">'
+            f'<title>{escape(service)}</title>{escape(label)}</text>'
         )
 
         # Incident marker
@@ -524,10 +536,10 @@ def _generate_timeline_html(timeline: List[Dict[str, Any]]) -> str:
 
     html_parts = []
     for incident in timeline[:20]:  # Limit to 20
-        timestamp = incident['timestamp'][:19]
-        service = incident['service']
-        inc_type = incident['type']
-        description = incident['description']
+        timestamp = escape(str(incident['timestamp'])[:19])
+        service = escape(str(incident['service']))
+        inc_type = escape(str(incident['type']))
+        description = escape(str(incident['description']))
         severity = incident['severity']
 
         html_parts.append(
@@ -550,19 +562,21 @@ def _generate_candidates_html(candidates: List[RootCauseCandidate]) -> str:
     html_parts = []
     for i, candidate in enumerate(candidates[:5], 1):
         evidence_items = '\n'.join(
-            f'<li>{ev}</li>' for ev in candidate.evidence[:10]
+            f'<li>{escape(str(ev))}</li>' for ev in candidate.evidence[:10]
         )
         remediation_items = '\n'.join(
-            f'<li>{step}</li>' for step in candidate.remediation
+            f'<li>{escape(str(step))}</li>' for step in candidate.remediation
         )
+        service = escape(candidate.service)
+        explanation = escape(candidate.explanation)
 
         html_parts.append(f'''
 <div class="candidate">
     <div class="header-row">
-        <h3>#{i}: {candidate.service}</h3>
+        <h3>#{i}: {service}</h3>
         <span class="confidence">{candidate.confidence:.0%} Confidence</span>
     </div>
-    <p class="explanation">{candidate.explanation}</p>
+    <p class="explanation">{explanation}</p>
 
     <button class="collapsible">View Evidence ({len(candidate.evidence)} items)</button>
     <div class="content">
