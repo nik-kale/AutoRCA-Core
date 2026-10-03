@@ -47,7 +47,7 @@ def load_metrics(
 
     # A directory loads all .csv, .jsonl and .json files below it
     metrics = load_source(
-        source_path, ['*.csv', '*.jsonl', '*.json'], _load_metrics_file, limits or IngestionLimits()
+        source_path, ["*.csv", "*.jsonl", "*.json"], _load_metrics_file, limits or IngestionLimits()
     )
 
     # Apply filters
@@ -67,9 +67,9 @@ def load_metrics(
 
 def _load_metrics_file(file_path: Path) -> List[MetricPoint]:
     """Load a single metrics file."""
-    if file_path.suffix == '.csv':
+    if file_path.suffix == ".csv":
         return _parse_csv_metrics(file_path)
-    elif file_path.suffix in ('.jsonl', '.json'):
+    elif file_path.suffix in (".jsonl", ".json"):
         return _parse_json_metrics(file_path)
     else:
         logger.warning(f"Unsupported metrics file format: {file_path}")
@@ -84,33 +84,47 @@ def _parse_csv_metrics(file_path: Path) -> List[MetricPoint]:
     """
     metrics = []
 
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             try:
-                timestamp_str = row.get('timestamp') or row.get('time')
+                timestamp_str = row.get("timestamp") or row.get("time")
                 if not timestamp_str:
                     continue
 
                 timestamp = to_utc(timestamp_str)
-                service = row.get('service', 'unknown')
-                metric_name = row.get('metric_name') or row.get('metric', 'unknown')
-                value = float(row.get('value', 0.0))
-                unit = row.get('unit')
+                service = row.get("service", "unknown")
+                metric_name = row.get("metric_name") or row.get("metric", "unknown")
+                value = float(row.get("value", 0.0))
+                unit = row.get("unit")
 
                 # Remaining columns are tags
-                tags = {k: v for k, v in row.items()
-                       if k not in ('timestamp', 'time', 'service', 'metric_name', 'metric', 'value', 'unit')}
+                tags = {
+                    k: v
+                    for k, v in row.items()
+                    if k
+                    not in (
+                        "timestamp",
+                        "time",
+                        "service",
+                        "metric_name",
+                        "metric",
+                        "value",
+                        "unit",
+                    )
+                }
 
-                metrics.append(MetricPoint(
-                    timestamp=timestamp,
-                    service=service,
-                    metric_name=metric_name,
-                    value=value,
-                    unit=unit,
-                    tags=tags,
-                    raw_data=row,
-                ))
+                metrics.append(
+                    MetricPoint(
+                        timestamp=timestamp,
+                        service=service,
+                        metric_name=metric_name,
+                        value=value,
+                        unit=unit,
+                        tags=tags,
+                        raw_data=row,
+                    )
+                )
             except (ValueError, KeyError, TypeError) as e:
                 logger.warning(f"Failed to parse CSV row in {file_path.name}: {e}")
 
@@ -136,18 +150,18 @@ def _parse_json_metric_item(item: Dict[str, Any]) -> Optional[MetricPoint]:
     if not isinstance(item, dict):
         return None
     try:
-        timestamp_str = item.get('timestamp') or item.get('time')
+        timestamp_str = item.get("timestamp") or item.get("time")
         if not timestamp_str:
             return None
 
         timestamp = to_utc(timestamp_str)
-        service = item.get('service') or item.get('service_name', 'unknown')
-        metric_name = item.get('metric_name') or item.get('metric') or item.get('name', 'unknown')
-        value = float(item.get('value', 0.0))
-        unit = item.get('unit')
+        service = item.get("service") or item.get("service_name", "unknown")
+        metric_name = item.get("metric_name") or item.get("metric") or item.get("name", "unknown")
+        value = float(item.get("value", 0.0))
+        unit = item.get("unit")
 
         # Extract tags
-        tags = item.get('tags', {})
+        tags = item.get("tags", {})
         if isinstance(tags, dict):
             tags = {str(k): str(v) for k, v in tags.items()}
         else:

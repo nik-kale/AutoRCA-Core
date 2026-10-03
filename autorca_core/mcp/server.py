@@ -72,9 +72,7 @@ def create_mcp_server():
         from mcp.server import Server
         from mcp.types import Tool, TextContent
     except ImportError:
-        raise ImportError(
-            "mcp package required for MCP server. Install with: pip install mcp"
-        )
+        raise ImportError("mcp package required for MCP server. Install with: pip install mcp")
 
     server = Server("autorca-core")
 
@@ -254,7 +252,11 @@ async def _handle_run_rca(args: Dict[str, Any]) -> str:
     window_minutes = args.get("window_minutes", 60)
     output_format = args.get("format", "markdown")
 
-    if not isinstance(window_minutes, int) or isinstance(window_minutes, bool) or window_minutes <= 0:
+    if (
+        not isinstance(window_minutes, int)
+        or isinstance(window_minutes, bool)
+        or window_minutes <= 0
+    ):
         raise ValueError("window_minutes must be a positive integer")
 
     logger.info(f"Running RCA for symptom: {symptom}")
@@ -321,7 +323,9 @@ async def _handle_analyze_logs(args: Dict[str, Any]) -> str:
     if error_logs:
         summary_parts.append("**Recent Errors:**")
         for log in sorted(error_logs, key=lambda x: x.timestamp, reverse=True)[:10]:
-            summary_parts.append(f"- [{log.timestamp.isoformat()}] {log.service}: {log.message[:100]}")
+            summary_parts.append(
+                f"- [{log.timestamp.isoformat()}] {log.service}: {log.message[:100]}"
+            )
 
     return "\n".join(summary_parts)
 
@@ -417,9 +421,7 @@ def start_mcp_server():
     try:
         from mcp.server.stdio import stdio_server
     except ImportError:
-        raise ImportError(
-            "mcp package required. Install with: pip install mcp"
-        )
+        raise ImportError("mcp package required. Install with: pip install mcp")
 
     async def run():
         async with stdio_server() as (read_stream, write_stream):
@@ -430,4 +432,3 @@ def start_mcp_server():
             )
 
     asyncio.run(run())
-

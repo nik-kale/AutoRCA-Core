@@ -17,6 +17,7 @@ class CausalChain:
 
     Example: DB latency → API timeouts → Frontend errors
     """
+
     incidents: List[IncidentNode]
     services: List[str]
     score: float  # Confidence score (0.0 - 1.0)
@@ -49,7 +50,9 @@ class GraphQueries:
         """
         severity_map: Dict[str, float] = {}
         for incident in self.graph.incidents:
-            severity_map[incident.service] = severity_map.get(incident.service, 0.0) + incident.severity
+            severity_map[incident.service] = (
+                severity_map.get(incident.service, 0.0) + incident.severity
+            )
 
         sorted_services = sorted(severity_map.items(), key=lambda x: x[1], reverse=True)
         return sorted_services[:top_n]
@@ -198,12 +201,14 @@ class GraphQueries:
                     chain_incidents.extend(self.graph.get_incidents_for_service(service))
 
                 explanation = self._generate_chain_explanation(new_path)
-                chains.append(CausalChain(
-                    incidents=chain_incidents,
-                    services=new_path,
-                    score=0.0,  # Will be scored later
-                    explanation=explanation,
-                ))
+                chains.append(
+                    CausalChain(
+                        incidents=chain_incidents,
+                        services=new_path,
+                        score=0.0,  # Will be scored later
+                        explanation=explanation,
+                    )
+                )
 
             # Continue exploration
             self._explore_chains(new_path, new_visited, chains, max_length)

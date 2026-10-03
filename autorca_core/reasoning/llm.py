@@ -216,11 +216,10 @@ class AnthropicLLM:
         # Initialize Anthropic client
         try:
             import anthropic
+
             self.client = anthropic.Anthropic(api_key=self.api_key)
         except ImportError:
-            raise ImportError(
-                "anthropic package required. Install with: pip install anthropic"
-            )
+            raise ImportError("anthropic package required. Install with: pip install anthropic")
 
     def summarize_rca(
         self,
@@ -295,13 +294,13 @@ Return the steps as a numbered list."""
             response_text = self._call_claude_with_retry(user_prompt, system_prompt=system_prompt)
 
             # Parse numbered list from response
-            lines = response_text.strip().split('\n')
+            lines = response_text.strip().split("\n")
             enhanced_steps = []
             for line in lines:
                 line = line.strip()
-                if line and (line[0].isdigit() or line.startswith('-')):
+                if line and (line[0].isdigit() or line.startswith("-")):
                     # Remove numbering/bullets
-                    step = line.lstrip('0123456789.-) ')
+                    step = line.lstrip("0123456789.-) ")
                     if step:
                         enhanced_steps.append(step)
 
@@ -335,11 +334,11 @@ Return the steps as a numbered list."""
         if graph.dependencies:
             prompt_parts.append("**Service Dependencies:**")
             # dependencies is a set: sort for a stable prompt, then limit to 10
-            dependencies = sorted(
-                graph.dependencies, key=lambda d: (d.from_service, d.to_service)
-            )
+            dependencies = sorted(graph.dependencies, key=lambda d: (d.from_service, d.to_service))
             for dep in dependencies[:10]:
-                prompt_parts.append(f"- {dep.from_service} → {dep.to_service} ({dep.dependency_type.value})")
+                prompt_parts.append(
+                    f"- {dep.from_service} → {dep.to_service} ({dep.dependency_type.value})"
+                )
             prompt_parts.append("")
 
         # Add incident timeline
@@ -438,12 +437,16 @@ Be concise, technical, and actionable. Focus on facts from the data provided."""
                 logger.warning(f"API call failed (attempt {attempt + 1}): {e}")
 
                 status = getattr(e, "status_code", None)
-                if isinstance(status, int) and status < 500 and status not in _RETRYABLE_STATUS_CODES:
+                if (
+                    isinstance(status, int)
+                    and status < 500
+                    and status not in _RETRYABLE_STATUS_CODES
+                ):
                     break  # Retrying will not change the outcome
 
                 if attempt < self.max_retries - 1:
                     # Exponential backoff: 1s, 2s, 4s
-                    wait_time = 2 ** attempt
+                    wait_time = 2**attempt
                     logger.info(f"Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 continue
@@ -478,7 +481,9 @@ Be concise, technical, and actionable. Focus on facts from the data provided."""
 
             # e.g. stop_reason "refusal", or max_tokens spent on thinking. The same
             # request would most likely end the same way, so do not retry.
-            last_error = RuntimeError(f"response contained no text (stop_reason={response.stop_reason})")
+            last_error = RuntimeError(
+                f"response contained no text (stop_reason={response.stop_reason})"
+            )
             break
 
         # All retries failed (or the error was not retryable)

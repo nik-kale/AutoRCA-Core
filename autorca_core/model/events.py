@@ -46,6 +46,7 @@ def to_utc(value: Union[datetime, date, str]) -> datetime:
 
 class EventType(str, Enum):
     """Type of observability event."""
+
     LOG = "log"
     METRIC = "metric"
     TRACE = "trace"
@@ -55,6 +56,7 @@ class EventType(str, Enum):
 
 class Severity(str, Enum):
     """Severity/level of an event."""
+
     DEBUG = "DEBUG"
     INFO = "INFO"
     WARN = "WARN"
@@ -69,6 +71,7 @@ class Event:
 
     All ingestion modules normalize their data into Event or subclass instances.
     """
+
     timestamp: datetime
     service: str
     event_type: EventType
@@ -94,6 +97,7 @@ class LogEvent(Event):
         error_type: Error class or type (optional)
         stack_trace: Stack trace if available (optional)
     """
+
     # Re-declared with a default so callers (and the log parsers) don't have to
     # pass it; the base class leaves it required.
     event_type: EventType = EventType.LOG
@@ -121,6 +125,7 @@ class MetricPoint:
 
     Represents a single metric observation (e.g., CPU%, request count, latency p95).
     """
+
     timestamp: datetime
     service: str
     metric_name: str
@@ -141,6 +146,7 @@ class Span:
 
     Represents a single operation in a distributed trace.
     """
+
     timestamp: datetime
     service: str
     span_id: str
@@ -172,6 +178,7 @@ class ConfigChange:
 
     Used to correlate incidents with recent changes.
     """
+
     timestamp: datetime
     service: str
     change_type: ChangeType = "config"

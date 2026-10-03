@@ -95,9 +95,7 @@ def validate_path(source_path: Path, file_path: Path) -> bool:
         file_resolved.relative_to(source_resolved)
         return True
     except ValueError:
-        raise PathTraversalError(
-            f"Path traversal detected: {file_path} is outside {source_path}"
-        )
+        raise PathTraversalError(f"Path traversal detected: {file_path} is outside {source_path}")
 
 
 def check_file_size(file_path: Path, limits: IngestionLimits) -> None:
@@ -133,9 +131,7 @@ def check_line_length(line: str, limits: IngestionLimits) -> None:
         LineLengthError: If line exceeds length limit
     """
     if len(line) > limits.max_line_length:
-        raise LineLengthError(
-            f"Line length {len(line)} exceeds limit of {limits.max_line_length}"
-        )
+        raise LineLengthError(f"Line length {len(line)} exceeds limit of {limits.max_line_length}")
 
 
 def sanitize_error_message(error: Exception, file_path: Optional[Path] = None) -> str:
@@ -178,4 +174,3 @@ def check_total_events(current_count: int, limits: IngestionLimits) -> None:
         raise ValidationError(
             f"Event count {current_count} exceeds limit of {limits.max_total_events}"
         )
-

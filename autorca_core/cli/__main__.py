@@ -20,6 +20,7 @@ def run_mcp_server():
     """Start the MCP server."""
     try:
         from autorca_core.mcp.server import start_mcp_server
+
         start_mcp_server()
     except ImportError:
         print("Error: MCP server requires the 'mcp' package.")
@@ -42,7 +43,7 @@ def main():
         "quickstart",
         help="Run quickstart example with synthetic data",
     )
-    
+
     # MCP server command
     subparsers.add_parser(
         "mcp-server",
@@ -133,9 +134,9 @@ def main():
     args = parser.parse_args()
 
     # Configure logging
-    if hasattr(args, 'quiet') and args.quiet:
+    if hasattr(args, "quiet") and args.quiet:
         configure_logging(level="CRITICAL")
-    elif hasattr(args, 'log_level'):
+    elif hasattr(args, "log_level"):
         configure_logging(level=args.log_level)
     else:
         configure_logging(level="INFO")
@@ -205,6 +206,7 @@ def run_quickstart():
     except Exception as e:
         print(f"Error running quickstart: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
@@ -276,9 +278,11 @@ def run_custom_rca(args):
                 print(generate_markdown_report(result))
             elif args.format == "json":
                 from autorca_core.outputs.reports import generate_json_report
+
                 print(generate_json_report(result))
             else:
                 from autorca_core.outputs.reports import generate_html_report
+
                 print(generate_html_report(result))
 
         _status()
@@ -289,6 +293,7 @@ def run_custom_rca(args):
     except Exception as e:
         _status(f"Error running RCA: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

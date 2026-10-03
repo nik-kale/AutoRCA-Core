@@ -32,6 +32,7 @@ class DataSourcesConfig:
         traces_dir: Path to traces directory or file
         configs_dir: Path to configs directory or file
     """
+
     logs_dir: Optional[str] = None
     metrics_dir: Optional[str] = None
     traces_dir: Optional[str] = None
@@ -51,6 +52,7 @@ class RCARunResult:
         timeline: Chronological list of incidents
         metadata: Additional metadata about the run
     """
+
     primary_symptom: str
     root_cause_candidates: List[RootCauseCandidate]
     service_graph: ServiceGraph

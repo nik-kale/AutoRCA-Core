@@ -47,7 +47,7 @@ def load_configs(
     # (pathlib globs do not support brace expansion, so one pattern each.)
     changes = load_source(
         source_path,
-        ['*.jsonl', '*.json', '*.yaml', '*.yml'],
+        ["*.jsonl", "*.json", "*.yaml", "*.yml"],
         _load_config_file,
         limits or IngestionLimits(),
     )
@@ -67,9 +67,9 @@ def load_configs(
 
 def _load_config_file(file_path: Path) -> List[ConfigChange]:
     """Load a single config change file."""
-    if file_path.suffix in ('.yaml', '.yml'):
+    if file_path.suffix in (".yaml", ".yml"):
         return _parse_yaml_configs(file_path)
-    elif file_path.suffix in ('.jsonl', '.json'):
+    elif file_path.suffix in (".jsonl", ".json"):
         return _parse_json_configs(file_path)
     else:
         logger.warning(f"Unsupported config file format: {file_path}")
@@ -91,7 +91,7 @@ def _parse_yaml_configs(file_path: Path) -> List[ConfigChange]:
     changes = []
 
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
             if isinstance(data, list):
@@ -114,7 +114,7 @@ def _parse_config_item(item: Dict[str, Any]) -> Optional[ConfigChange]:
     if not isinstance(item, dict):
         return None
     try:
-        timestamp_str = item.get('timestamp') or item.get('time') or item.get('deployed_at')
+        timestamp_str = item.get("timestamp") or item.get("time") or item.get("deployed_at")
         if not timestamp_str:
             return None
 
@@ -122,27 +122,27 @@ def _parse_config_item(item: Dict[str, Any]) -> Optional[ConfigChange]:
         if not isinstance(timestamp_str, (datetime, date)):
             timestamp_str = str(timestamp_str)
         timestamp = to_utc(timestamp_str)
-        service = item.get('service') or item.get('service_name', 'unknown')
+        service = item.get("service") or item.get("service_name", "unknown")
 
         # Determine change type
-        change_type_val = str(item.get('change_type') or item.get('type') or 'config').lower()
+        change_type_val = str(item.get("change_type") or item.get("type") or "config").lower()
         change_type: ChangeType
-        if change_type_val in ('deploy', 'deployment', 'release'):
-            change_type = 'deployment'
-        elif change_type_val in ('scale', 'scaling', 'autoscale'):
-            change_type = 'scaling'
-        elif change_type_val in ('config', 'configuration'):
-            change_type = 'config'
+        if change_type_val in ("deploy", "deployment", "release"):
+            change_type = "deployment"
+        elif change_type_val in ("scale", "scaling", "autoscale"):
+            change_type = "scaling"
+        elif change_type_val in ("config", "configuration"):
+            change_type = "config"
         else:
-            change_type = 'other'
+            change_type = "other"
 
-        description = item.get('description') or item.get('message') or ''
-        version_before = item.get('version_before') or item.get('old_version')
-        version_after = item.get('version_after') or item.get('new_version') or item.get('version')
-        changed_by = item.get('changed_by') or item.get('deployed_by') or item.get('user')
+        description = item.get("description") or item.get("message") or ""
+        version_before = item.get("version_before") or item.get("old_version")
+        version_after = item.get("version_after") or item.get("new_version") or item.get("version")
+        changed_by = item.get("changed_by") or item.get("deployed_by") or item.get("user")
 
         # Extract tags
-        tags = item.get('tags', {})
+        tags = item.get("tags", {})
         if isinstance(tags, dict):
             tags = {str(k): str(v) for k, v in tags.items()}
         else:

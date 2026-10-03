@@ -98,4 +98,3 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
         configure_logging()
 
     return logging.getLogger(logger_name)
-

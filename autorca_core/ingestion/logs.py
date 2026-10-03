@@ -53,7 +53,7 @@ def load_logs(
     # A directory loads all .log, .jsonl and .txt files below it
     events = load_source(
         source_path,
-        ['*.log', '*.jsonl', '*.txt'],
+        ["*.log", "*.jsonl", "*.txt"],
         lambda path: _load_log_file(path, limits),
         limits,
     )
@@ -75,7 +75,7 @@ def _load_log_file(file_path: Path, limits: IngestionLimits) -> List[LogEvent]:
     """Load a single log file."""
     events = []
 
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         for line_num, line in enumerate(f, start=1):
             line = line.strip()
             if not line:
@@ -110,7 +110,7 @@ def _parse_json_log(line: str) -> Optional[LogEvent]:
         data = json.loads(line)
 
         # Extract timestamp
-        timestamp_str = data.get('timestamp') or data.get('time') or data.get('@timestamp')
+        timestamp_str = data.get("timestamp") or data.get("time") or data.get("@timestamp")
         if not timestamp_str:
             # Use current time as fallback (timezone-aware)
             timestamp = datetime.now(timezone.utc)
@@ -118,21 +118,21 @@ def _parse_json_log(line: str) -> Optional[LogEvent]:
             timestamp = to_utc(timestamp_str)
 
         # Extract service
-        service = data.get('service') or data.get('service_name') or data.get('app') or 'unknown'
+        service = data.get("service") or data.get("service_name") or data.get("app") or "unknown"
 
         # Extract message
-        message = data.get('message') or data.get('msg') or str(data)
+        message = data.get("message") or data.get("msg") or str(data)
 
         # Extract level
-        level_str = data.get('level') or data.get('severity') or data.get('loglevel') or 'INFO'
+        level_str = data.get("level") or data.get("severity") or data.get("loglevel") or "INFO"
         level = _parse_severity(level_str)
 
         # Extract optional fields
-        logger = data.get('logger') or data.get('logger_name')
-        trace_id = data.get('trace_id') or data.get('traceId')
-        request_id = data.get('request_id') or data.get('requestId')
-        error_type = data.get('error_type') or data.get('exception_type')
-        stack_trace = data.get('stack_trace') or data.get('stacktrace')
+        logger = data.get("logger") or data.get("logger_name")
+        trace_id = data.get("trace_id") or data.get("traceId")
+        request_id = data.get("request_id") or data.get("requestId")
+        error_type = data.get("error_type") or data.get("exception_type")
+        stack_trace = data.get("stack_trace") or data.get("stacktrace")
 
         return LogEvent(
             timestamp=timestamp,
@@ -158,7 +158,7 @@ def _parse_text_log(line: str) -> Optional[LogEvent]:
     """
     # Common log pattern: [timestamp] [level] [service] message
     # Example: 2025-11-10T10:00:00Z ERROR api-gateway Upstream timeout
-    pattern = r'(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)\s+(\w+)\s+(\S+)\s+(.+)'
+    pattern = r"(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)\s+(\w+)\s+(\S+)\s+(.+)"
     match = re.match(pattern, line)
 
     if match:
@@ -193,13 +193,13 @@ def _parse_severity(level_str: str) -> Severity:
     """Parse severity string into Severity enum."""
     level_upper = level_str.upper()
 
-    if 'CRIT' in level_upper or 'FATAL' in level_upper:
+    if "CRIT" in level_upper or "FATAL" in level_upper:
         return Severity.CRITICAL
-    elif 'ERR' in level_upper:
+    elif "ERR" in level_upper:
         return Severity.ERROR
-    elif 'WARN' in level_upper:
+    elif "WARN" in level_upper:
         return Severity.WARN
-    elif 'DEBUG' in level_upper or 'TRACE' in level_upper:
+    elif "DEBUG" in level_upper or "TRACE" in level_upper:
         return Severity.DEBUG
     else:
         return Severity.INFO

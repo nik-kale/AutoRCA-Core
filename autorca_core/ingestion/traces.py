@@ -46,7 +46,7 @@ def load_traces(
 
     # A directory loads all .jsonl and .json files below it
     spans = load_source(
-        source_path, ['*.jsonl', '*.json'], _load_trace_file, limits or IngestionLimits()
+        source_path, ["*.jsonl", "*.json"], _load_trace_file, limits or IngestionLimits()
     )
 
     # Apply filters
@@ -84,7 +84,7 @@ def _parse_span(item: Dict[str, Any]) -> Optional[Span]:
         return None
     try:
         # Extract timestamp (may be in nanoseconds or ISO format)
-        timestamp_val = item.get('timestamp') or item.get('start_time') or item.get('startTime')
+        timestamp_val = item.get("timestamp") or item.get("start_time") or item.get("startTime")
         if not timestamp_val:
             return None
 
@@ -100,20 +100,26 @@ def _parse_span(item: Dict[str, Any]) -> Optional[Span]:
             timestamp = to_utc(str(timestamp_val))
 
         # Extract required fields
-        span_id = item.get('span_id') or item.get('spanId') or item.get('id', 'unknown')
-        trace_id = item.get('trace_id') or item.get('traceId', 'unknown')
-        service = item.get('service') or item.get('service_name') or item.get('serviceName', 'unknown')
+        span_id = item.get("span_id") or item.get("spanId") or item.get("id", "unknown")
+        trace_id = item.get("trace_id") or item.get("traceId", "unknown")
+        service = (
+            item.get("service") or item.get("service_name") or item.get("serviceName", "unknown")
+        )
 
         # Extract optional fields
-        parent_span_id = item.get('parent_span_id') or item.get('parentSpanId') or item.get('parent_id')
-        operation_name = item.get('operation_name') or item.get('operationName') or item.get('name', '')
+        parent_span_id = (
+            item.get("parent_span_id") or item.get("parentSpanId") or item.get("parent_id")
+        )
+        operation_name = (
+            item.get("operation_name") or item.get("operationName") or item.get("name", "")
+        )
 
         # Extract duration. An explicit duration_ms is taken as-is; a bare
         # "duration" has no unit, so guess it from the magnitude.
-        if item.get('duration_ms') is not None:
-            duration_ms = float(item['duration_ms'])
+        if item.get("duration_ms") is not None:
+            duration_ms = float(item["duration_ms"])
         else:
-            duration_val = item.get('duration') or 0.0
+            duration_val = item.get("duration") or 0.0
             if isinstance(duration_val, (int, float)):
                 if duration_val > 1e6:  # Likely nanoseconds
                     duration_ms = duration_val / 1e6
@@ -125,11 +131,11 @@ def _parse_span(item: Dict[str, Any]) -> Optional[Span]:
                 duration_ms = 0.0
 
         # Extract status
-        status_code = item.get('status_code') or item.get('statusCode') or item.get('http_status')
-        error = item.get('error', False) or item.get('has_error', False)
+        status_code = item.get("status_code") or item.get("statusCode") or item.get("http_status")
+        error = item.get("error", False) or item.get("has_error", False)
 
         # Extract tags
-        tags = item.get('tags', {})
+        tags = item.get("tags", {})
         if isinstance(tags, dict):
             tags = {str(k): str(v) for k, v in tags.items()}
         else:

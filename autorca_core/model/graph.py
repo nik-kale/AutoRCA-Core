@@ -15,6 +15,7 @@ from autorca_core.model.events import to_utc
 
 class DependencyType(str, Enum):
     """Type of dependency between services."""
+
     HTTP = "http"
     DATABASE = "database"
     QUEUE = "queue"
@@ -25,6 +26,7 @@ class DependencyType(str, Enum):
 
 class IncidentType(str, Enum):
     """Type of incident or symptom."""
+
     ERROR_SPIKE = "error_spike"
     LATENCY_SPIKE = "latency_spike"
     THROUGHPUT_DROP = "throughput_drop"
@@ -44,6 +46,7 @@ class Service:
         service_type: Type of service (api, database, cache, etc.)
         metadata: Additional service metadata (version, region, etc.)
     """
+
     name: str
     service_type: str = "unknown"
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -69,6 +72,7 @@ class Dependency:
         weight: Strength/frequency of dependency (higher = more calls)
         metadata: Additional edge metadata
     """
+
     from_service: str
     to_service: str
     dependency_type: DependencyType = DependencyType.UNKNOWN
@@ -102,6 +106,7 @@ class IncidentNode:
         evidence: Supporting evidence (log lines, metric values, etc.)
         metadata: Additional incident metadata
     """
+
     service: str
     incident_type: IncidentType
     timestamp: datetime
@@ -124,6 +129,7 @@ class ServiceGraph:
     This graph represents the runtime relationships between services and
     is used to propagate causal analysis during RCA.
     """
+
     services: Dict[str, Service] = field(default_factory=dict)
     dependencies: Set[Dependency] = field(default_factory=set)
     incidents: List[IncidentNode] = field(default_factory=list)
@@ -170,14 +176,18 @@ class ServiceGraph:
         """
         severity_map: Dict[str, float] = {}
         for incident in self.incidents:
-            severity_map[incident.service] = severity_map.get(incident.service, 0.0) + incident.severity
+            severity_map[incident.service] = (
+                severity_map.get(incident.service, 0.0) + incident.severity
+            )
         return sorted(severity_map.keys(), key=lambda s: severity_map[s], reverse=True)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the graph to a dictionary."""
         return {
-            "services": [{"name": s.name, "type": s.service_type, "metadata": s.metadata}
-                        for s in self.services.values()],
+            "services": [
+                {"name": s.name, "type": s.service_type, "metadata": s.metadata}
+                for s in self.services.values()
+            ],
             "dependencies": [
                 {
                     "from": d.from_service,
